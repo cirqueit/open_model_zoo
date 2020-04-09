@@ -29,7 +29,7 @@ import time
 
 from pathlib import Path
 
-import common
+from . import common
 
 CHUNK_SIZE = 1 << 15 if sys.stdout.isatty() else 1 << 20
 
