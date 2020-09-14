@@ -19,24 +19,350 @@ from collections import namedtuple
 
 import cv2
 import numpy as np
+from PIL import Image
 
-from ..config import ConfigError, NumberField, StringField, BoolField, ListField
-from ..preprocessor import Preprocessor
-from ..utils import get_size_from_config, string_to_tuple, get_size_3d_from_config
+from ..config import ConfigError, NumberField, StringField, BoolField
+from ..dependency import ClassProvider
 from ..logging import warning
+from ..preprocessor import Preprocessor
+from ..utils import contains_all, get_size_from_config, string_to_tuple, get_size_3d_from_config
 
-try:
-    from PIL import Image
-except ImportError:
-    Image = None
-
-try:
-    from skimage.transform import estimate_transform, warp
-except ImportError:
-    estimate_transform, warp = None, None
 
 # The field .type should be string, the field .parameters should be dict
 GeometricOperationMetadata = namedtuple('GeometricOperationMetadata', ['type', 'parameters'])
+
+
+def scale_width(dst_width, dst_height, image_width, image_height,):
+    return int(dst_width * image_width / image_height), dst_height
+
+
+def scale_height(dst_width, dst_height, image_width, image_height):
+    return dst_width, int(dst_height * image_height / image_width)
+
+
+def scale_greater(dst_width, dst_height, image_width, image_height):
+    if image_height > image_width:
+        return scale_height(dst_width, dst_height, image_width, image_height)
+    return scale_width(dst_width, dst_height, image_width, image_height)
+
+
+def scale_fit_to_window(dst_width, dst_height, image_width, image_height):
+    im_scale = min(dst_height / image_height, dst_width / image_width)
+    return int(im_scale * image_width), int(im_scale * image_height)
+
+
+def frcnn_keep_aspect_ratio(dst_width, dst_height, image_width, image_height):
+    min_size = min(dst_width, dst_height)
+    max_size = max(dst_width, dst_height)
+    w1, h1 = scale_greater(min_size, min_size, image_width, image_height)
+    if max(w1, h1) <= max_size:
+        return w1, h1
+
+    return scale_fit_to_window(max_size, max_size, image_width, image_height)
+
+
+def ctpn_keep_aspect_ratio(dst_width, dst_height, image_width, image_height):
+    scale = min(dst_height, dst_width)
+    max_scale = max(dst_height, dst_width)
+    im_min_size = min(image_width, image_height)
+    im_max_size = max(image_width, image_height)
+    im_scale = float(scale) / float(im_min_size)
+    if np.round(im_scale * im_max_size) > max_scale:
+        im_scale = float(max_scale) / float(im_max_size)
+    new_h = np.round(image_height * im_scale)
+    new_w = np.round(image_width * im_scale)
+    return int(new_w), int(new_h)
+
+
+def east_keep_aspect_ratio(dst_width, dst_height, image_width, image_height):
+    resize_w = image_width
+    resize_h = image_height
+    max_side_len = max(dst_width, dst_height)
+    min_side_len = min(dst_width, dst_height)
+
+    # limit the max side
+    if max(resize_h, resize_w) > max_side_len:
+        ratio = float(max_side_len) / resize_h if resize_h > resize_w else float(max_side_len) / resize_w
+    else:
+        ratio = 1.
+    resize_h = int(resize_h * ratio)
+    resize_w = int(resize_w * ratio)
+
+    resize_h = resize_h if resize_h % min_side_len == 0 else (resize_h // min_side_len - 1) * min_side_len
+    resize_w = resize_w if resize_w % min_side_len == 0 else (resize_w // min_side_len - 1) * min_side_len
+    resize_h = max(32, resize_h)
+    resize_w = max(32, resize_w)
+
+    return resize_w, resize_h
+
+
+ASPECT_RATIO_SCALE = {
+    'width': scale_width,
+    'height': scale_height,
+    'greater': scale_greater,
+    'fit_to_window': scale_fit_to_window,
+    'frcnn_keep_aspect_ratio': frcnn_keep_aspect_ratio,
+    'ctpn_keep_aspect_ratio': ctpn_keep_aspect_ratio,
+    'east_keep_aspect_ratio': east_keep_aspect_ratio
+}
+
+
+class _Resizer(ClassProvider):
+    __provider_type__ = 'resizer'
+
+    supported_interpolations = {}
+    default_interpolation = None
+
+    def __init__(self, interpolation=None):
+        if not interpolation:
+            interpolation = self.default_interpolation
+        if interpolation.upper() not in self.supported_interpolations:
+            raise ConfigError('{} not found for {}'.format(self.supported_interpolations, self.__provider__))
+        self.interpolation = self.supported_interpolations.get(interpolation.upper(), self.default_interpolation)
+
+    def resize(self, data, new_height, new_width):
+        raise NotImplementedError
+
+    def __call__(self, data, new_height, new_width):
+        return self.resize(data, new_height, new_width)
+
+    @classmethod
+    def all_provided_interpolations(cls):
+        interpolations = set()
+        for _, provider_class in cls.providers.items():
+            try:
+                interpolations.update(provider_class.supported_interpolations)
+            except ImportError:
+                continue
+        return interpolations
+
+
+class _OpenCVResizer(_Resizer):
+    __provider__ = 'opencv'
+
+    supported_interpolations = {
+        'NEAREST': cv2.INTER_NEAREST,
+        'LINEAR': cv2.INTER_LINEAR,
+        'CUBIC': cv2.INTER_CUBIC,
+        'AREA': cv2.INTER_AREA,
+        'MAX': cv2.INTER_MAX,
+        'BITS': cv2.INTER_BITS,
+        'BITS2': cv2.INTER_BITS2,
+        'LANCZOS4': cv2.INTER_LANCZOS4,
+    }
+    default_interpolation = 'LINEAR'
+
+    def resize(self, data, new_height, new_width):
+        return cv2.resize(data, (new_width, new_height), interpolation=self.interpolation).astype(np.float32)
+
+
+class _PillowResizer(_Resizer):
+    __provider__ = 'pillow'
+
+    supported_interpolations = {
+        'NEAREST': Image.NEAREST,
+        'NONE': Image.NONE,
+        'BOX': Image.BOX,
+        'BILINEAR': Image.BILINEAR,
+        'LINEAR': Image.LINEAR,
+        'HAMMING': Image.HAMMING,
+        'BICUBIC': Image.BICUBIC,
+        'CUBIC': Image.CUBIC,
+        'LANCZOS': Image.LANCZOS,
+        'ANTIALIAS': Image.ANTIALIAS
+    }
+    default_interpolation = 'BILINEAR'
+
+    def resize(self, data, new_height, new_width):
+        data = Image.fromarray(data)
+        data = data.resize((new_width, new_height), self.interpolation)
+        data = np.array(data)
+
+        return data
+
+
+class _TFResizer(_Resizer):
+    __provider__ = 'tf'
+
+    def __init__(self, interpolation):
+        try:
+            import tensorflow as tf
+        except ImportError as import_error:
+            raise ImportError(
+                'tf resize disabled. Please, install Tensorflow before using. \n{}'.format(import_error.msg)
+            )
+        tf.enable_eager_execution()
+        self.supported_interpolations = {
+            'BILINEAR': tf.image.ResizeMethod.BILINEAR,
+            'AREA': tf.image.ResizeMethod.AREA,
+            'BICUBIC': tf.image.ResizeMethod.BICUBIC,
+        }
+        self.default_interpolation = 'BILINEAR'
+        self._resize = tf.image.resize_images
+
+        super().__init__(interpolation)
+
+    def resize(self, data, new_height, new_width):
+        resized_data = self._resize(data, [new_height, new_width], method=self.interpolation)
+        return resized_data.numpy()
+
+
+def create_resizer(config):
+    resize_realization = config.get('resize_realization')
+    interpolation = config.get('interpolation')
+
+    def provided_both_resizer(additional_flag):
+        return contains_all(config, ['resize_realization', additional_flag])
+
+    def select_resizer_by_flags(use_pil, use_tf):
+        if use_pil and use_tf:
+            raise ConfigError('Pillow and TensorFlow flags both provided. Please select only one resize method.')
+        if use_pil:
+            return 'pillow'
+        if use_tf:
+            return 'tf'
+        return 'opencv'
+
+    if resize_realization:
+        if provided_both_resizer('use_pillow') or provided_both_resizer('use_tensorflow'):
+            warning(
+                'resize_realization and flag: {} both provided. resize_realization: {} will be used.'.format(
+                    'use_pillow' if 'use_pillow' in config else 'use_tensorflow', config['resize_realization']
+                )
+            )
+    else:
+        use_pillow, use_tesorfow = config.get('use_pillow', False), config.get('use_tensorflow', False)
+        resize_realization = select_resizer_by_flags(use_pillow, use_tesorfow)
+
+    return _Resizer.provide(resize_realization, interpolation)
+
+
+class Resize(Preprocessor):
+    __provider__ = 'resize'
+
+    @classmethod
+    def parameters(cls):
+        parameters = super().parameters()
+        parameters.update({
+            'size': NumberField(
+                value_type=int, optional=True, min_value=1, description="Destination sizes for both dimensions."
+            ),
+            'dst_width': NumberField(
+                value_type=int, optional=True, min_value=1, description="Destination width for image resizing."
+            ),
+            'dst_height': NumberField(
+                value_type=int, optional=True, min_value=1, description="Destination height for image resizing."
+            ),
+            'aspect_ratio_scale': StringField(
+                choices=ASPECT_RATIO_SCALE, optional=True,
+                description="Allows save image aspect ratio using one of these ways: "
+                            "{}".format(', '.join(ASPECT_RATIO_SCALE))
+            ),
+            'interpolation': StringField(
+                choices=_Resizer.all_provided_interpolations(), optional=True, default='LINEAR',
+                description="Specifies method that will be used."
+            ),
+            'use_pillow': BoolField(
+                optional=True, default=False,
+                description="Parameter specifies usage of Pillow library for resizing."
+            ),
+            'use_tensorflow': BoolField(
+                optional=True,
+                description="Specifies usage of TensorFlow Image for resizing. Requires TensorFlow installation."
+            ),
+            'resize_realization': StringField(
+                optional=True, choices=_Resizer.providers,
+                description="Parameter specifies functionality of which library will be used for resize: "
+                            "{}".format(', '.join(_Resizer.providers))
+            )
+        })
+
+        return parameters
+
+    def configure(self):
+        self.dst_height, self.dst_width = get_size_from_config(self.config)
+        self.resizer = create_resizer(self.config)
+        self.scaling_func = ASPECT_RATIO_SCALE.get(self.get_value_from_config('aspect_ratio_scale'))
+
+    def process(self, image, annotation_meta=None):
+        data = image.data
+        new_height, new_width = self.dst_height, self.dst_width
+
+        is_simple_case = not isinstance(data, list) # otherwise -- pyramid, tiling, etc
+
+        def process_data(data, new_height, new_width, scale_func, resize_func):
+            dst_width, dst_height = new_width, new_height
+            image_h, image_w = data.shape[:2]
+            if scale_func:
+                dst_width, dst_height = scale_func(new_width, new_height, image_w, image_h)
+
+            resize_meta = {}
+            resize_meta['preferable_width'] = max(dst_width, new_width)
+            resize_meta['preferable_height'] = max(dst_height, new_height)
+            resize_meta['image_info'] = [dst_height, dst_width, 1]
+            resize_meta['scale_x'] = float(dst_width) / image_w
+            resize_meta['scale_y'] = float(dst_height) / image_h
+            resize_meta['original_width'] = image_w
+            resize_meta['original_height'] = image_h
+
+            if is_simple_case:
+                # support GeometricOperationMetadata array for simple case only -- without tiling, pyramids, etc
+                image.metadata.setdefault(
+                    'geometric_operations', []).append(GeometricOperationMetadata('resize', resize_meta))
+
+            image.metadata.update(resize_meta)
+
+            data = resize_func(data, dst_height, dst_width)
+            if len(data.shape) == 2:
+                data = np.expand_dims(data, axis=-1)
+
+            return data
+
+        image.data = (
+            process_data(data, new_height, new_width, self.scaling_func, self.resizer)
+            if is_simple_case else [
+                process_data(data_fragment, new_height, new_width, self.scaling_func, self.resizer)
+                for data_fragment in data
+            ]
+        )
+
+        return image
+
+
+class AutoResize(Preprocessor):
+    __provider__ = 'auto_resize'
+
+    def configure(self):
+        if self.input_shapes is None or len(self.input_shapes) != 1:
+            raise ConfigError('resize to input size possible, only for one input layer case')
+        input_shape = next(iter(self.input_shapes.values()))
+        self.dst_height, self.dst_width = input_shape[2:]
+
+    def process(self, image, annotation_meta=None):
+        is_simple_case = not isinstance(image.data, list) # otherwise -- pyramid, tiling, etc
+
+        def process_data(data):
+            data = cv2.resize(data, (self.dst_width, self.dst_height)).astype(np.float32)
+            if len(data.shape) == 2:
+                data = np.expand_dims(data, axis=-1)
+
+            if is_simple_case:
+                # support GeometricOperationMetadata array for simple case only -- without tiling, pyramids, etc
+                image.metadata.setdefault('geometric_operations', []).append(
+                    GeometricOperationMetadata('auto_resize', {})
+                )
+
+            return data
+
+        data = image.data
+        image.data = (
+            process_data(data) if is_simple_case else [
+                process_data(data_fragment)for data_fragment in data
+            ]
+        )
+
+        return image
+
 
 FLIP_MODES = {'horizontal': 0, 'vertical': 1}
 
@@ -48,10 +374,8 @@ class Flip(Preprocessor):
     def parameters(cls):
         parameters = super().parameters()
         parameters.update({
-            'mode': StringField(
-                choices=FLIP_MODES.keys(), default='horizontal',
-                description="Specifies the axis for flipping (vertical or horizontal)."
-            )
+            'mode' : StringField(choices=FLIP_MODES.keys(), default='horizontal',
+                                 description="Specifies the axis for flipping (vertical or horizontal).")
         })
         return parameters
 
@@ -98,10 +422,6 @@ class Crop(Preprocessor):
 
     def configure(self):
         self.use_pillow = self.get_value_from_config('use_pillow')
-        if self.use_pillow and Image is None:
-            raise ValueError(
-                'Crop operation with pillow backend, requires Pillow. Please install it or select default backend'
-            )
         self.dst_height, self.dst_width = get_size_from_config(self.config, allow_none=True)
         self.central_fraction = self.get_value_from_config('central_fraction')
         if self.dst_height is None and self.dst_width is None and self.central_fraction is None:
@@ -117,65 +437,56 @@ class Crop(Preprocessor):
         is_simple_case = not isinstance(image.data, list) # otherwise -- pyramid, tiling, etc
         data = image.data
 
-        image.data = self.process_data(
-            data, self.dst_height, self.dst_width, self.central_fraction,
-            self.use_pillow, is_simple_case, image.metadata
+        def process_data(data, dst_height, dst_width, central_fraction, use_pillow):
+            height, width = data.shape[:2]
+            if not central_fraction:
+                new_height = dst_height
+                new_width = dst_width
+            else:
+                new_height = int(height * central_fraction)
+                new_width = int(width * central_fraction)
+
+            if use_pillow:
+                i = int(round((height - new_height) / 2.))
+                j = int(round((width - new_width) / 2.))
+                cropped_data = Image.fromarray(data).crop((j, i, j + new_width, i + new_height))
+                return np.array(cropped_data)
+
+            if width < new_width or height < new_height:
+                resized = np.array([width, height])
+                if resized[0] < new_width:
+                    resized = resized * new_width / resized[0]
+                if resized[1] < new_height:
+                    resized = resized * new_height / resized[1]
+                data = cv2.resize(data, tuple(np.ceil(resized).astype(int)))
+
+            height, width = data.shape[:2]
+            start_height = (height - new_height) // 2
+            start_width = (width - new_width) // 2
+
+            if is_simple_case:
+                # support GeometricOperationMetadata array for simple case only -- without tiling, pyramids, etc
+                image.metadata.setdefault('geometric_operations', []).append(GeometricOperationMetadata('crop', {}))
+
+            return data[start_height:start_height + new_height, start_width:start_width + new_width]
+
+        image.data = process_data(
+            data, self.dst_height, self.dst_width, self.central_fraction, self.use_pillow
         ) if not isinstance(data, list) else [
-            self.process_data(
-                fragment, self.dst_height, self.dst_width, self.central_fraction,
-                self.use_pillow, is_simple_case, image.metadata
+            process_data(
+                fragment, self.dst_height, self.dst_width, self.central_fraction, self.use_pillow
             ) for fragment in image.data
         ]
 
         return image
-
-    @staticmethod
-    def process_data(data, dst_height, dst_width, central_fraction, use_pillow, is_simple_case, metadata):
-        height, width = data.shape[:2]
-        if not central_fraction:
-            new_height = dst_height
-            new_width = dst_width
-        else:
-            new_height = int(height * central_fraction)
-            new_width = int(width * central_fraction)
-
-        if use_pillow:
-            i = int(round((height - new_height) / 2.))
-            j = int(round((width - new_width) / 2.))
-            cropped_data = Image.fromarray(data).crop((j, i, j + new_width, i + new_height))
-            return np.array(cropped_data)
-
-        if width < new_width or height < new_height:
-            resized = np.array([width, height])
-            if resized[0] < new_width:
-                resized = resized * new_width / resized[0]
-            if resized[1] < new_height:
-                resized = resized * new_height / resized[1]
-            data = cv2.resize(data, tuple(np.ceil(resized).astype(int)))
-
-        height, width = data.shape[:2]
-        start_height = (height - new_height) // 2
-        start_width = (width - new_width) // 2
-        if is_simple_case:
-            # support GeometricOperationMetadata array for simple case only -- without tiling, pyramids, etc
-            metadata.setdefault('geometric_operations', []).append(GeometricOperationMetadata('crop', {}))
-
-        return data[start_height:start_height + new_height, start_width:start_width + new_width]
 
 
 class CropRect(Preprocessor):
     __provider__ = 'crop_rect'
 
     def process(self, image, annotation_meta=None):
-        if not annotation_meta:
-            warning('operation *crop_rect* required annotation metadata')
-            return image
         rect = annotation_meta.get('rect')
         if not rect:
-            warning(
-                'operation *crop_rect* rect key in annotation meta, please use annotation converter '
-                'which allows such transformation'
-            )
             return image
 
         rows, cols = image.data.shape[:2]
@@ -207,16 +518,6 @@ class ExtendAroundRect(Preprocessor):
         self.augmentation_param = self.get_value_from_config('augmentation_param')
 
     def process(self, image, annotation_meta=None):
-        if not annotation_meta:
-            warning('operation *extend_around_rect* required annotation metadata')
-            return image
-        rect = annotation_meta.get('rect')
-        if not rect:
-            warning(
-                'operation *extend_around_rect* require rect key in annotation meta, please use annotation converter '
-                'which allows such transformation'
-            )
-            return image
         rect = annotation_meta.get('rect')
         rows, cols = image.data.shape[:2]
 
@@ -302,16 +603,7 @@ class PointAligner(Preprocessor):
         self.dst_height, self.dst_width = get_size_from_config(self.config)
 
     def process(self, image, annotation_meta=None):
-        if not annotation_meta:
-            warning('operation *point_alignment* required annotation metadata')
-            return image
         keypoints = annotation_meta.get('keypoints')
-        if not keypoints:
-            warning(
-                'operation *point_alignment* require keypoints key in annotation meta, please use annotation converter '
-                'which allows such transformation'
-            )
-            return image
         image.data = self.align(image.data, keypoints)
         image.metadata.setdefault('geometric_operations', []).append(GeometricOperationMetadata('point_alignment', {}))
         return image
@@ -345,11 +637,11 @@ class PointAligner(Preprocessor):
 
     @staticmethod
     def transformation_from_points(points1, points2):
-        points1 = points1.astype(np.float64)
-        points2 = points2.astype(np.float64)
+        points1 = np.matrix(points1.astype(np.float64))
+        points2 = np.matrix(points2.astype(np.float64))
 
-        c1 = np.mean(points1, axis=0, keepdims=True)
-        c2 = np.mean(points2, axis=0, keepdims=True)
+        c1 = np.mean(points1, axis=0)
+        c2 = np.mean(points2, axis=0)
         points1 -= c1
         points2 -= c2
         s1 = np.std(points1)
@@ -358,10 +650,10 @@ class PointAligner(Preprocessor):
         points2 /= np.maximum(s1, np.finfo(np.float64).eps)
         points_std_ratio = s2 / np.maximum(s1, np.finfo(np.float64).eps)
 
-        u, _, vt = np.linalg.svd(points1.T @ points2)
-        r = (u @ vt).T
+        u, _, vt = np.linalg.svd(points1.T * points2)
+        r = (u * vt).T
 
-        return np.hstack((points_std_ratio * r, c2.T - points_std_ratio * r @ c1.T))
+        return np.hstack((points_std_ratio * r, c2.T - points_std_ratio * r * c1.T))
 
 
 def center_padding(dst_width, dst_height, width, height):
@@ -414,11 +706,6 @@ class Padding(Preprocessor):
             ),
             'use_numpy': BoolField(
                 optional=True, default=False, description="Allow to use numpy for padding instead default OpenCV."
-            ),
-            'numpy_pad_mode': StringField(
-                optional=True, default='constant',
-                choices=['constant', 'edge', 'maximum', 'minimum', 'mean', 'median', 'wrap'],
-                description="If use_numpy is True, Numpy padding mode,including constant, edge, mean, etc."
             )
         })
 
@@ -434,7 +721,6 @@ class Padding(Preprocessor):
         self.dst_height, self.dst_width = get_size_from_config(self.config, allow_none=True)
         self.pad_func = padding_func[self.get_value_from_config('pad_type')]
         self.use_numpy = self.get_value_from_config('use_numpy')
-        self.numpy_pad_mode = self.get_value_from_config('numpy_pad_mode')
 
     def process(self, image, annotation_meta=None):
         height, width, _ = image.data.shape
@@ -474,14 +760,9 @@ class Padding(Preprocessor):
             (self.pad_value[1], self.pad_value[1]),
             (self.pad_value[2], self.pad_value[2])
         )
-        if self.numpy_pad_mode != 'constant':
-            return np.pad(
-                image, ((pad[0], pad[2]), (pad[1], pad[3]), (0, 0)),
-                mode=self.numpy_pad_mode
-            )
         return np.pad(
             image, ((pad[0], pad[2]), (pad[1], pad[3]), (0, 0)),
-            mode=self.numpy_pad_mode, constant_values=pad_values
+            mode='constant', constant_values=pad_values
         )
 
 
@@ -584,410 +865,3 @@ class Crop3D(Preprocessor):
         endz = min(startz + cropz, z)
 
         return img[startz:endz, starty:endy, startx:endx, :]
-
-
-class TransformedCropWithAutoScale(Preprocessor):
-    __provider__ = 'transformed_crop_with_auto_scale'
-
-    @classmethod
-    def parameters(cls):
-        parameters = super().parameters()
-        parameters.update({
-            'size': NumberField(
-                value_type=int, optional=True, min_value=1,
-                description="Destination sizes for both dimensions of heatmaps output."
-            ),
-            'dst_width': NumberField(
-                value_type=int, optional=True, min_value=1, description="Width of heatmaps output."
-            ),
-            'dst_height': NumberField(
-                value_type=int, optional=True, min_value=1, description="Height of heatmaps output."
-            ),
-            'stride': NumberField(
-                value_type=int, optional=False,
-                description="Stride for network. It is input size of heatmaps / output size of heatmaps."
-            )
-        })
-
-        return parameters
-
-    def configure(self):
-        self.input_height, self.input_width = get_size_from_config(self.config)
-        self.stride = self.get_value_from_config('stride')
-
-    def process(self, image, annotation_meta=None):
-        data = image.data
-        center, scale = self.get_center_scale(annotation_meta['rects'][0], data.shape[1], data.shape[0])
-        trans = self.get_transformation_matrix(center, scale, [self.input_width, self.input_height])
-        rev_trans = self.get_transformation_matrix(center, scale, [self.input_width // self.stride,
-                                                                   self.input_height // self.stride], key=1)
-        data = cv2.warpAffine(data, trans, (self.input_width, self.input_height), flags=cv2.INTER_LINEAR)
-        image.data = data
-        image.metadata.setdefault('rev_trans', rev_trans)
-        return image
-
-    @staticmethod
-    def get_center_scale(bbox, image_w, image_h):
-        aspect_ratio = 0.75
-        bbox[0] = np.max((0, bbox[0]))
-        bbox[1] = np.max((0, bbox[1]))
-        x2 = np.min((image_w - 1, bbox[0] + np.max((0, bbox[2] - 1))))
-        y2 = np.min((image_h - 1, bbox[1] + np.max((0, bbox[3] - 1))))
-        if x2 >= bbox[0] and y2 >= bbox[1]:
-            bbox = [bbox[0], bbox[1], x2 - bbox[0], y2 - bbox[1]]
-        cx_bbox = bbox[0] + bbox[2] * 0.5
-        cy_bbox = bbox[1] + bbox[3] * 0.5
-        center = np.array([np.float32(cx_bbox), np.float32(cy_bbox)])
-        if bbox[2] > aspect_ratio * bbox[3]:
-            bbox[3] = bbox[2] * 1.0 / aspect_ratio
-        elif bbox[2] < aspect_ratio * bbox[3]:
-            bbox[2] = bbox[3] * aspect_ratio
-
-        scale = np.array([bbox[2] / 200., bbox[3] / 200.], np.float32) * 1.25
-
-        return center, scale
-
-    @staticmethod
-    def get_transformation_matrix(center, scale, output_size, key=0):
-        w, _ = scale * 200
-        shift_y = [0, -w * 0.5]
-        shift_x = [-w * 0.5, 0]
-        points = np.array([center, center + shift_x, center + shift_y], dtype=np.float32)
-        transformed_points = np.array([
-            [output_size[0] * 0.5, output_size[1] * 0.5],
-            [0, output_size[1] * 0.5],
-            [output_size[0] * 0.5, output_size[1] * 0.5 - output_size[0] * 0.5]], dtype=np.float32)
-        if key == 0:
-            trans = cv2.getAffineTransform(np.float32(points), np.float32(transformed_points))
-        else:
-            trans = cv2.getAffineTransform(np.float32(transformed_points), np.float32(points))
-        return trans
-
-
-class ImagePyramid(Preprocessor):
-    __provider__ = 'pyramid'
-
-    @classmethod
-    def parameters(cls):
-        parameters = super().parameters()
-        parameters.update(
-            {
-                'min_size': NumberField(value_type=int, min_value=1, description='min side size for pyramid layer'),
-                'factor': NumberField(value_type=float, description='scale factor for pyramid layers')
-            }
-        )
-
-        return parameters
-
-    def configure(self):
-        self.min_size = self.get_value_from_config('min_size')
-        self.factor = self.get_value_from_config('factor')
-
-    def process(self, image, annotation_meta=None):
-        data = image.data.astype(float)
-        height, width, _ = data.shape
-        min_layer = min(height, width)
-        m = 12.0 / self.min_size
-        min_layer = min_layer * m
-        scales = []
-        factor_count = 0
-        while min_layer >= 12:
-            scales.append(m * pow(self.factor, factor_count))
-            min_layer *= self.factor
-            factor_count += 1
-        scaled_data = []
-        for scale in scales:
-            hs = int(np.ceil(height * scale))
-            ws = int(np.ceil(width * scale))
-            scaled_data.append(cv2.resize(data, (ws, hs)))
-
-        image.data = scaled_data
-        image.metadata.update({'multi_infer': True, 'scales': scales})
-
-        return image
-
-class FaceDetectionImagePyramid(Preprocessor):
-    __provider__ = 'face_detection_image_pyramid'
-
-    @classmethod
-    def parameters(cls):
-        parameters = super().parameters()
-        parameters.update(
-            {
-                'min_face_ratio': NumberField(
-                    value_type=float, default=0.05, min_value=0.01, max_value=1,
-                    description='Minimum face ratio to image size'
-                ),
-                'resize_scale': NumberField(
-                    value_type=int, default=2, min_value=1,
-                    description='Scale factor for pyramid layers'
-                )
-            }
-        )
-        return parameters
-
-    def configure(self):
-        self.min_face_ratio = self.get_value_from_config('min_face_ratio')
-        self.resize_scale = self.get_value_from_config('resize_scale')
-        self.min_supported_face_size = 24
-        self.stage1_window_size = [12, 192]
-
-    def perform_scaling(self, initial_width, initial_height, img_width, img_height):
-        width = initial_width
-        height = initial_height
-
-        image_pyramid = []
-        scales = []
-        pyramid_scale = 1
-
-        shorter = min(img_height, img_width)
-        min_face_size = max(int(shorter * self.min_face_ratio), self.min_supported_face_size)
-
-        while width >= self.stage1_window_size[0] and height >= self.stage1_window_size[0]:
-            min_detectable_size = int(img_width / width + 0.5) * self.stage1_window_size[0]
-            if min_detectable_size >= min_face_size:
-                if min_detectable_size > self.min_supported_face_size:
-                    pyramid_scale /= 2
-                    width = int(initial_width / pyramid_scale + 0.5)
-                    height = int(initial_height / pyramid_scale + 0.5)
-
-                image_pyramid.append((int(width), int(height)))
-                scales.append(img_width / int(width))
-
-                max_detectable_size = int(img_width / width + 0.5) * self.stage1_window_size[1]
-                if max_detectable_size < shorter:
-                    while max_detectable_size > min_detectable_size:
-                        pyramid_scale *= self.resize_scale
-                        width = int(initial_height / pyramid_scale + 0.5)
-                        height = int(initial_height / pyramid_scale + 0.5)
-                        min_detectable_size = int(img_width / width + 0.5) * self.stage1_window_size[0]
-                        min_detectable_size *= 2
-                break
-
-            pyramid_scale *= self.resize_scale
-            width = int(initial_width / pyramid_scale + 0.5)
-            height = int(initial_height / pyramid_scale + 0.5)
-
-        return image_pyramid, scales, pyramid_scale
-
-    def process(self, image, annotation_meta=None):
-        img_height, img_width, _ = image.data.shape
-        initial_width = img_width * self.stage1_window_size[0] / self.min_supported_face_size
-        initial_height = img_height * self.stage1_window_size[0] / self.min_supported_face_size
-        image_pyramid, scales, pyramid_scale = self.perform_scaling(
-            initial_width,
-            initial_height,
-            img_width, img_height
-        )
-
-        if len(image_pyramid) == 0:
-            pyramid_scale /= self.resize_scale
-            width = int(initial_width / pyramid_scale + 0.5)
-            height = int(initial_height / pyramid_scale + 0.5)
-            image_pyramid.append((width, height))
-            scales.append(img_width / width)
-
-        scaled_data = []
-        data = image.data
-
-        # perform resizing
-        for dimension in image_pyramid:
-            w, h = dimension
-            scaled_data.append(cv2.resize(data, (w, h)))
-
-        image.data = scaled_data
-        image.metadata.update({'multi_infer': True, 'scales': scales})
-        return image
-
-class WarpAffine(Preprocessor):
-    __provider__ = 'warp_affine'
-
-    @classmethod
-    def parameters(cls):
-        parameters = super().parameters()
-        parameters.update({
-            'src_landmarks': ListField(
-                description='Source landmark points',
-                value_type=ListField(value_type=int)
-            ),
-            'dst_landmarks': ListField(
-                description='Destination landmark points',
-                value_type=ListField(value_type=int)
-            )
-        })
-        return parameters
-
-    def configure(self):
-        self.src_landmarks = self.get_value_from_config('src_landmarks')
-        self.dst_landmarks = self.get_value_from_config('dst_landmarks')
-        self.validate(self.src_landmarks, self.dst_landmarks)
-
-    def validate(self, point1, point2):
-        if len(self.src_landmarks) != len(self.dst_landmarks):
-            raise ConfigError('To align points, number of src landmarks and dst landmarks must match')
-        if len(self.src_landmarks) <= 0:
-            raise ConfigError('One or more landmark points are required')
-        if not all(len(c) == 2 for c in self.src_landmarks) or not all(len(c) == 2 for c in self.dst_landmarks):
-            raise ConfigError('Coordinate values must be a list of size 2')
-
-    def process(self, image, annotation_meta=None):
-        is_simple_case = not isinstance(image.data, list)
-
-        def process_data(data):
-            height, width, _ = data.shape
-            src = np.array(self.src_landmarks, dtype=np.float32)
-            dst = np.array(self.dst_landmarks, dtype=np.float32)
-            M = cv2.estimateAffinePartial2D(src, dst, method=cv2.LMEDS)[0]
-            data = cv2.warpAffine(data, M, (height, width), borderValue=0.0).copy()
-            return data
-
-        if is_simple_case:
-            image.data = process_data(image.data)
-            return image
-
-        image.data = [process_data(images) for images in image.data]
-        return image
-
-
-class SimilarityTransfom(Preprocessor):
-    __provider__ = 'similarity_transform_box'
-
-    @classmethod
-    def parameters(cls):
-        params = super().parameters()
-        params.update({
-            'box_scale': NumberField(value_type=float, min_value=0, description='Scale factor for box', default=1.),
-            'size': NumberField(
-                value_type=int, optional=True, min_value=1, description="Destination sizes for both dimensions."
-            ),
-            'dst_width': NumberField(
-                value_type=int, optional=True, min_value=1, description="Destination width for image resizing."
-            ),
-            'dst_height': NumberField(
-                value_type=int, optional=True, min_value=1, description="Destination height for image resizing."
-            )
-        })
-        return params
-
-    def configure(self):
-        if estimate_transform is None:
-            raise ConfigError('similarity_transform_box requires skimage installation. Please install it before usage.')
-        self.box_scale = self.get_value_from_config('box_scale')
-        self.dst_height, self.dst_width = get_size_from_config(self.config)
-
-    def process(self, image, annotation_meta=None):
-        left, top, right, bottom = annotation_meta.get('rect', [0, 0, image.data.shape[0], image.data.shape[1]])
-        old_size = (right - left + bottom - top) / 2
-        center = np.array([right - (right - left) / 2.0, bottom - (bottom - top) / 2.0])
-        size = int(old_size * self.box_scale)
-        src_pts = np.array([[center[0] - size / 2, center[1] - size / 2], [center[0] - size / 2, center[1] + size / 2],
-                            [center[0] + size / 2, center[1] - size / 2]])
-        dst_pts = np.array([[0, 0], [0, self.dst_height - 1], [self.dst_width - 1, 0]])
-        tform = estimate_transform('similarity', src_pts, dst_pts)
-        image.data = warp(image.data / 255, tform.inverse, output_shape=(self.dst_width, self.dst_height))
-        image.data *= 255
-
-        image.metadata['transform_matrix'] = tform.params
-        image.metadata['roi_box'] = [left, top, right, bottom]
-
-        return image
-
-    @staticmethod
-    def estimate_transform(src, dst):
-        num = src.shape[0]
-        dim = src.shape[1]
-
-        src_mean = src.mean(axis=0)
-        dst_mean = dst.mean(axis=0)
-
-        src_demean = src - src_mean
-        dst_demean = dst - dst_mean
-        A = dst_demean.T @ src_demean / num
-
-        d = np.ones((dim,), dtype=np.double)
-        if np.linalg.det(A) < 0:
-            d[dim - 1] = -1
-
-        T = np.eye(dim + 1, dtype=np.double)
-
-        U, S, V = np.linalg.svd(A)
-
-        rank = np.linalg.matrix_rank(A)
-        if rank == 0:
-            return np.nan * T
-        if rank == dim - 1:
-            if np.linalg.det(U) * np.linalg.det(V) > 0:
-                T[:dim, :dim] = U @ V
-            else:
-                s = d[dim - 1]
-                d[dim - 1] = -1
-                T[:dim, :dim] = U @ np.diag(d) @ V
-                d[dim - 1] = s
-        else:
-            T[:dim, :dim] = U @ np.diag(d) @ V
-
-        scale = 1.0 / src_demean.var(axis=0).sum() * (S @ d)
-
-        T[:dim, dim] = dst_mean - scale * (T[:dim, :dim] @ src_mean.T)
-        T[:dim, :dim] *= scale
-
-        return T
-
-class FacePatch(Preprocessor):
-    __provider__ = 'face_patch'
-
-    @classmethod
-    def parameters(cls):
-        parameters = super().parameters()
-        parameters.update({
-            'scale_width': NumberField(
-                value_type=float, min_value=0, default=1, optional=True,
-                description='Value to scale width relative to the original candidate width'
-            ),
-            'scale_height': NumberField(
-                value_type=float, min_value=0, default=1, optional=True,
-                description='Value to scale height relative to the original candidate height'
-            )
-        })
-        return parameters
-
-    def configure(self):
-        self.scale_width = self.get_value_from_config('scale_width')
-        self.scale_height = self.get_value_from_config('scale_height')
-
-    def process(self, image, annotation_meta=None):
-        candidates = annotation_meta['candidate_info']
-        face_patches = []
-        data = image.data
-        img_height, img_width, _ = data.shape
-        for i in range(candidates.x_mins.size):
-            x_min = int(round(candidates.x_mins[i]))
-            y_min = int(round(candidates.y_mins[i]))
-
-            width = int(round(candidates.x_maxs[i] - candidates.x_mins[i]))
-            height = int(round(candidates.y_maxs[i] - candidates.y_mins[i]))
-
-            x_min -= int(round(width * (self.scale_width -1) / 2))
-            y_min -= int(round(height * (self.scale_height - 1) / 2))
-            width = int(round(width * self.scale_width))
-            height = int(round(height * self.scale_height))
-
-            face_patch = np.zeros((height, width, 3), dtype=image.data.dtype)
-
-            dst_rect = data[max(0, y_min):min(y_min+height, img_height), max(0, x_min):min(x_min+width, img_width)]
-            face_patch[
-                max(-y_min, 0):max(-y_min, 0) + dst_rect.shape[0],
-                max(-x_min, 0):max(-x_min, 0) + dst_rect.shape[1]
-            ] = dst_rect
-            face_patches.append(face_patch)
-
-        if candidates.x_mins.size == 0:
-            face_patches.append(data)
-
-        image.data = face_patches
-        image.metadata.update({
-            'multi_infer': True,
-            'candidates': candidates
-        })
-
-        return image

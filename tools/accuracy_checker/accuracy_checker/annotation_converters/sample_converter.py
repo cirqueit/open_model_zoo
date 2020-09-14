@@ -35,12 +35,11 @@ class SampleConverter(BaseFormatConverter):
 
     @classmethod
     def parameters(cls):
-        configuration_parameters = super().parameters()
-        configuration_parameters.update({
+        parameters = super().parameters()
+        parameters.update({
             'data_dir': PathField(is_directory=True, description="Path to sample dataset root directory.")
         })
-
-        return configuration_parameters
+        return parameters
 
     def configure(self):
         """

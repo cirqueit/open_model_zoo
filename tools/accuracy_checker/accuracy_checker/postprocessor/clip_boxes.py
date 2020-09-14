@@ -18,7 +18,6 @@ from ..config import BoolField, NumberField
 from ..representation import DetectionPrediction, DetectionAnnotation
 from .postprocessor import PostprocessorWithSpecificTargets
 
-
 class ClipBoxes(PostprocessorWithSpecificTargets):
     __provider__ = 'clip_boxes'
 

@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-
 from .base_representation import BaseRepresentation
 from .classification_representation import (
     Classification,
@@ -26,8 +25,6 @@ from .detection_representation import (
     Detection,
     DetectionAnnotation,
     DetectionPrediction,
-    AttributeDetectionAnnotation,
-    AttributeDetectionPrediction,
     ActionDetectionAnnotation,
     ActionDetectionPrediction
 )
@@ -43,8 +40,7 @@ from .segmentation_representation import (
     BrainTumorSegmentationAnnotation,
     BrainTumorSegmentationPrediction,
     CoCoInstanceSegmentationAnnotation,
-    CoCocInstanceSegmentationPrediction,
-    OAR3DTilingSegmentationAnnotation,
+    CoCocInstanceSegmentationPrediction
 )
 from .character_recognition_representation import (
     CharacterRecognition,
@@ -57,8 +53,6 @@ from .regression_representation import (
     RegressionPrediction,
     FacialLandmarksAnnotation,
     FacialLandmarksPrediction,
-    FacialLandmarks3DAnnotation,
-    FacialLandmarks3DPrediction,
     GazeVectorAnnotation,
     GazeVectorPrediction
 )
@@ -66,22 +60,8 @@ from .multilabel_recognition import MultiLabelRecognitionAnnotation, MultiLabelR
 from .super_resolution_representation import SuperResolutionAnnotation, SuperResolutionPrediction
 from .text_detection_representation import TextDetectionAnnotation, TextDetectionPrediction
 from .pose_estimation_representation import PoseEstimationAnnotation, PoseEstimationPrediction
-from .pose_estimation_3d_representation import PoseEstimation3dAnnotation, PoseEstimation3dPrediction
 from .hit_ratio_representation import HitRatio, HitRatioAnnotation, HitRatioPrediction
-from .nlp_representation import (
-    MachineTranslationAnnotation,
-    MachineTranslationPrediction,
-    QuestionAnsweringAnnotation,
-    QuestionAnsweringPrediction,
-    TextClassificationAnnotation,
-    LanguageModelingAnnotation,
-    LanguageModelingPrediction
-)
-from .image_inpainting import ImageInpaintingAnnotation, ImageInpaintingPrediction
-from .style_transfer import StyleTransferAnnotation, StyleTransferPrediction
-
-from .depth_estimation import DepthEstimationAnnotation, DepthEstimationPrediction
-from .image_processing import ImageProcessingAnnotation, ImageProcessingPrediction
+from .nlp_representation import MachineTranslationAnnotation, MachineTranslationPrediction
 
 __all__ = [
     'BaseRepresentation',
@@ -95,8 +75,6 @@ __all__ = [
     'DetectionAnnotation',
     'DetectionPrediction',
 
-    'AttributeDetectionAnnotation',
-    'AttributeDetectionPrediction',
     'ActionDetectionAnnotation',
     'ActionDetectionPrediction',
 
@@ -110,7 +88,6 @@ __all__ = [
 
     'BrainTumorSegmentationAnnotation',
     'BrainTumorSegmentationPrediction',
-    'OAR3DTilingSegmentationAnnotation',
 
     'CoCoInstanceSegmentationAnnotation',
     'CoCocInstanceSegmentationPrediction',
@@ -127,8 +104,6 @@ __all__ = [
     'RegressionPrediction',
     'FacialLandmarksAnnotation',
     'FacialLandmarksPrediction',
-    'FacialLandmarks3DAnnotation',
-    'FacialLandmarks3DPrediction',
     'GazeVectorAnnotation',
     'GazeVectorPrediction',
 
@@ -137,34 +112,17 @@ __all__ = [
 
     'SuperResolutionAnnotation',
     'SuperResolutionPrediction',
-    'ImageInpaintingAnnotation',
-    'ImageInpaintingPrediction',
-    'ImageProcessingAnnotation',
-    'ImageProcessingPrediction',
-    'StyleTransferAnnotation',
-    'StyleTransferPrediction',
 
     'TextDetectionAnnotation',
     'TextDetectionPrediction',
 
     'PoseEstimationAnnotation',
     'PoseEstimationPrediction',
-    'PoseEstimation3dAnnotation',
-    'PoseEstimation3dPrediction',
 
     'HitRatio',
     'HitRatioAnnotation',
     'HitRatioPrediction',
 
     'MachineTranslationAnnotation',
-    'MachineTranslationPrediction',
-    'QuestionAnsweringAnnotation',
-    'QuestionAnsweringPrediction',
-    'TextClassificationAnnotation',
-    'LanguageModelingAnnotation',
-    'LanguageModelingPrediction',
-
-    'DepthEstimationAnnotation',
-    'DepthEstimationPrediction',
-
+    'MachineTranslationPrediction'
 ]

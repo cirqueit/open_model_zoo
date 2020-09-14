@@ -21,14 +21,14 @@ class WMTConverter(BaseFormatConverter):
 
     @classmethod
     def parameters(cls):
-        configuration_parameters = super().parameters()
-        configuration_parameters.update(
+        parameters = super().parameters()
+        parameters.update(
             {
                 'input_file': PathField(description='path to input file'),
                 'reference_file': PathField(description='path to file with reference for translation')
             }
         )
-        return configuration_parameters
+        return parameters
 
     def configure(self):
         self.input_file = self.get_value_from_config('input_file')

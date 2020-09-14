@@ -15,7 +15,6 @@ limitations under the License.
 """
 
 import copy
-from collections import namedtuple
 from ..representation import ContainerRepresentation
 from ..config import ConfigError
 from ..utils import is_single_metric_source, get_supported_representations
@@ -23,8 +22,6 @@ from ..presenters import BasePresenter
 from ..config import ConfigValidator, NumberField, StringField
 from ..dependency import ClassProvider
 from ..utils import zipped_transform, get_parameter_value_from_config, contains_any
-
-PerImageMetricResult = namedtuple('PerImageMetricResult', ['metric_name', 'metric_type', 'result', 'direction'])
 
 
 class Metric(ClassProvider):
@@ -45,7 +42,7 @@ class Metric(ClassProvider):
         self.dataset = dataset
         self.state = state
         self._update_iter = 0
-        self.meta = {'target': 'higher-better'}
+        self.meta = {}
         self._initial_state = copy.deepcopy(state)
 
         self.validate_config()
@@ -95,8 +92,7 @@ class Metric(ClassProvider):
         return get_parameter_value_from_config(self.config, self.parameters(), key)
 
     def submit(self, annotation, prediction):
-        direction = self.meta.get('target', 'higher-better')
-        return PerImageMetricResult(self.name, self.config['type'], self.update(annotation, prediction), direction)
+        self.update(annotation, prediction)
 
     def submit_all(self, annotations, predictions):
         return self.evaluate(annotations, predictions)
@@ -179,17 +175,14 @@ class Metric(ClassProvider):
 
     def reset(self):
         if self.state:
-            self.state = copy.deepcopy(self._initial_state)
+            self.state = self._initial_state
             self._update_iter = 0
 
 
 class PerImageEvaluationMetric(Metric):
     def submit(self, annotation, prediction):
         annotation_, prediction_ = self._resolve_representation_containers(annotation, prediction)
-        metric_result = self.update(annotation_, prediction_)
-        direction = self.meta.get('target', 'higher-better')
-
-        return PerImageMetricResult(self.name, self.config['type'], metric_result, direction)
+        self.update(annotation_, prediction_)
 
     def evaluate(self, annotations, predictions):
         raise NotImplementedError

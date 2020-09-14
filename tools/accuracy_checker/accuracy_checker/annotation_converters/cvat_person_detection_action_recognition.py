@@ -100,8 +100,8 @@ class CVATPersonDetectionActionRecognitionConverter(FileBasedAnnotationConverter
 
     @classmethod
     def parameters(cls):
-        configuration_parameters = super().parameters()
-        configuration_parameters.update({
+        parameters = super().parameters()
+        parameters.update({
             'images_dir': PathField(
                 is_directory=True, optional=True,
                 description='path to dataset images, used only for content existence check'
@@ -112,7 +112,7 @@ class CVATPersonDetectionActionRecognitionConverter(FileBasedAnnotationConverter
                             "Supported range actions: {}".format(', '.join(ACTIONS.keys()))
             ),
         })
-        return configuration_parameters
+        return parameters
 
     def configure(self):
         super().configure()

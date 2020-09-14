@@ -28,12 +28,11 @@ from ..representation import ReIdentificationClassificationAnnotation
 from ..utils import get_path, OrderedSet
 from ..data_analyzer import BaseDataAnalyzer
 from .format_converter import BaseFormatConverter
-from ..utils import cast_to_bool
 
 
 def build_argparser():
     parser = ArgumentParser(
-        description="Converts annotation form an arbitrary format to accuracy-checker specific format", add_help=False
+        description="Converts annotation form a arbitrary format to accuracy-checker specific format", add_help=False
     )
     parser.add_argument(
         "converter",
@@ -53,19 +52,12 @@ def build_argparser():
         "--subsample_seed", help="Seed for generation dataset subsample", type=int, required=False, default=666
     )
     parser.add_argument('--analyze_dataset', required=False, action='store_true')
-    parser.add_argument(
-        "--shuffle",
-        help="Allow shuffle annotation during creation a subset",
-        required=False,
-        type=cast_to_bool,
-        default=True
-    )
 
     return parser
 
 
-def make_subset(annotation, size, seed=666, shuffle=True):
-    def make_subset_pairwise(annotation, size, shuffle=True):
+def make_subset(annotation, size, seed=666):
+    def make_subset_pairwise(annotation, size):
         def get_pairs(pairs_list):
             pairs_set = OrderedSet()
             for identifier in pairs_list:
@@ -81,10 +73,8 @@ def make_subset(annotation, size, seed=666, shuffle=True):
             return pairs_set
 
         subsample_set = OrderedSet()
-
-        potential_ann_ind = np.random.choice(len(annotation), size, replace=False) if shuffle else np.arange(size)
-
-        for ann_ind in potential_ann_ind: # pylint: disable=E1133
+        potential_ann_ind = np.random.choice(len(annotation), size, replace=False)
+        for ann_ind in potential_ann_ind:
             annotation_for_subset = annotation[ann_ind]
             positive_pairs = annotation_for_subset.positive_pairs
             negative_pairs = annotation_for_subset.negative_pairs
@@ -94,13 +84,11 @@ def make_subset(annotation, size, seed=666, shuffle=True):
             updated_pairs.add(annotation_for_subset)
             updated_pairs |= get_pairs(positive_pairs)
             updated_pairs |= get_pairs(negative_pairs)
-            intersection = subsample_set & updated_pairs
             subsample_set |= updated_pairs
             if len(subsample_set) == size:
                 break
             if len(subsample_set) > size:
-                to_delete = updated_pairs - intersection
-                subsample_set -= to_delete
+                subsample_set -= updated_pairs
 
         return list(subsample_set)
 
@@ -110,10 +98,9 @@ def make_subset(annotation, size, seed=666, shuffle=True):
         warnings.warn('Dataset size {} less than subset size {}'.format(dataset_size, size))
         return annotation
     if isinstance(annotation[-1], ReIdentificationClassificationAnnotation):
-        return make_subset_pairwise(annotation, size, shuffle)
+        return make_subset_pairwise(annotation, size)
 
-    result_annotation = list(np.random.choice(annotation, size=size, replace=False)) if shuffle else annotation[:size]
-    return result_annotation
+    return list(np.random.choice(annotation, size=size, replace=False))
 
 
 def main():
@@ -143,7 +130,7 @@ def main():
         else:
             subsample_size = int(args.subsample)
 
-        converted_annotation = make_subset(converted_annotation, subsample_size, args.subsample_seed, args.shuffle)
+        converted_annotation = make_subset(converted_annotation, subsample_size, args.subsample_seed)
 
     if args.analyze_dataset:
         analyze_dataset(converted_annotation, meta)
@@ -160,16 +147,10 @@ def main():
 
 def save_annotation(annotation, meta, annotation_file, meta_file):
     if annotation_file:
-        annotation_dir = annotation_file.parent
-        if not annotation_dir.exists():
-            annotation_dir.mkdir(parents=True)
         with annotation_file.open('wb') as file:
             for representation in annotation:
                 representation.dump(file)
     if meta_file and meta:
-        meta_dir = meta_file.parent
-        if not meta_dir.exists():
-            meta_dir.mkdir(parents=True)
         with meta_file.open('wt') as file:
             json.dump(meta, file)
 

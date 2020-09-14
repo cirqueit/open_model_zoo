@@ -21,7 +21,6 @@ from .postprocessor import Postprocessor
 from ..representation import SegmentationAnnotation, SegmentationPrediction
 from ..config import NumberField, ConfigError
 
-
 class ExtendSegmentationMask(Postprocessor):
     """
     Extend annotation segmentation mask to prediction size filling border with specific label.
@@ -36,7 +35,7 @@ class ExtendSegmentationMask(Postprocessor):
     def parameters(cls):
         parameters = super().parameters()
         parameters.update({
-            'filling_label': NumberField(
+            'filling_label' : NumberField(
                 optional=True, value_type=int, default=255, description="Value for filling border."
             )
         })

@@ -26,9 +26,10 @@ models:
 
       - framework: dlsdk
         tags:
-          - FP16-INT8
-        model:   intel/human-pose-estimation-0001/FP16-INT8/human-pose-estimation-0001.xml
-        weights: intel/human-pose-estimation-0001/FP16-INT8/human-pose-estimation-0001.bin
+          - INT8
+        device: CPU
+        model:   intel/human-pose-estimation-0001/INT8/human-pose-estimation-0001.xml
+        weights: intel/human-pose-estimation-0001/INT8/human-pose-estimation-0001.bin
         allow_reshape_input: True
         adapter:
           type: human_pose_estimation
@@ -58,5 +59,3 @@ models:
           - name: AP
             type: coco_precision
             max_detections: 20
-
-global_definitions: ../dataset_definitions.yml

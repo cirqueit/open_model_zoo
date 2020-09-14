@@ -19,7 +19,6 @@ from .postprocessor import Postprocessor
 from ..representation import DetectionPrediction, DetectionAnnotation
 from ..utils import get_size_from_config
 
-
 class CorrectYoloV2Boxes(Postprocessor):
     __provider__ = 'correct_yolo_v2_boxes'
 

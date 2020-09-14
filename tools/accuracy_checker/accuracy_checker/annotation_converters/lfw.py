@@ -30,8 +30,8 @@ class LFWConverter(BaseFormatConverter):
 
     @classmethod
     def parameters(cls):
-        configuration_parameters = super().parameters()
-        configuration_parameters.update({
+        parameters = super().parameters()
+        parameters.update({
             'pairs_file': PathField(description="Path to file with annotation positive and negative pairs."),
             'landmarks_file': PathField(
                 optional=True, description="Path to file with facial landmarks coordinates for annotation images."
@@ -42,7 +42,7 @@ class LFWConverter(BaseFormatConverter):
             )
         })
 
-        return configuration_parameters
+        return parameters
 
     def configure(self):
         self.pairs_file = self.get_value_from_config('pairs_file')

@@ -1,5 +1,5 @@
 """
-Copyright (c) 2019-2020 Intel Corporation
+Copyright (c) 2019 Intel Corporation
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,27 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-from .metric_executor import MetricsExecutor
-from .metric import Metric, PerImageMetricResult
+from .metric_executor import MetricsExecutor, Metric
 
-from .classification import (
-    ClassificationAccuracy,
-    ClassificationAccuracyClasses,
-    ClipAccuracy,
-    ClassificationF1Score,
-    MetthewsCorrelation
-)
-from .detection import (DetectionMAP, MissRate, Recall, DetectionAccuracyMetric, YoutubeFacesAccuracy)
-from .reid import (
-    CMCScore,
-    ReidMAP,
-    PairwiseAccuracy,
-    PairwiseAccuracySubsets,
-    FaceRecognitionTAFAPairMetric,
-    NormalizedEmbeddingAccuracy
-)
+from .classification import ClassificationAccuracy, ClassificationAccuracyClasses, ClipAccuracy
+from .detection import (DetectionMAP, MissRate, Recall, DetectionAccuracyMetric)
+from .reid import CMCScore, ReidMAP, PairwiseAccuracy, PairwiseAccuracySubsets
 from .semantic_segmentation import SegmentationAccuracy, SegmentationIOU, SegmentationMeanAccuracy, SegmentationFWAcc
-from .character_recognition import CharacterRecognitionAccuracy, LabelLevelRecognitionAccuracy
+from .character_recognition import CharacterRecognitionAccuracy
 from .regression import (
     MeanAbsoluteErrorOnInterval,
     MeanSquaredErrorOnInterval,
@@ -49,7 +35,6 @@ from .regression import (
     FacialLandmarksNormedError,
 
     PeakSignalToNoiseRatio,
-    StructuralSimilarity,
 
     AngleError
 )
@@ -62,50 +47,35 @@ from .text_detection import (
     IncidentalSceneTextLocalizationRecall,
     IncidentalSceneTextLocalizationHMean
 )
-from .coco_metrics import MSCOCOAveragePrecision, MSCOCORecall, MSCOCOKeypointsPrecision, MSCOCOKeypointsRecall
+from .coco_metrics import MSCOCOAveragePrecision, MSCOCORecall
 from .coco_orig_metrics import (
     MSCOCOorigAveragePrecision,
     MSCOCOorigRecall,
 
     MSCOCOOrigSegmAveragePrecision,
-    MSCOCOorigSegmRecall,
-
-    MSCOCOOrigKeyPointsAveragePrecision,
+    MSCOCOorigSegmRecall
 )
 from .hit_ratio import HitRatioMetric, NDSGMetric
 from .machine_translation import BilingualEvaluationUnderstudy
-from .question_answering import ExactMatchScore, ScoreF1
-from .mpjpe_multiperson import MpjpeMultiperson
-from .language_modeling import ScorePerplexity
 
-from .attribute_classification import (
-    AttributeClassificationRecall,
-    AttributeClassificationPrecision,
-    AttributeClassificationAccuracy
-)
 
 __all__ = [
     'Metric',
     'MetricsExecutor',
-    'PerImageMetricResult',
 
     'ClassificationAccuracy',
     'ClassificationAccuracyClasses',
     'ClipAccuracy',
-    'ClassificationF1Score',
 
     'DetectionMAP',
     'MissRate',
     'Recall',
     'DetectionAccuracyMetric',
-    'YoutubeFacesAccuracy',
 
     'CMCScore',
     'ReidMAP',
     'PairwiseAccuracy',
     'PairwiseAccuracySubsets',
-    'FaceRecognitionTAFAPairMetric',
-    'NormalizedEmbeddingAccuracy',
 
     'SegmentationAccuracy',
     'SegmentationIOU',
@@ -113,7 +83,6 @@ __all__ = [
     'SegmentationFWAcc',
 
     'CharacterRecognitionAccuracy',
-    'LabelLevelRecognitionAccuracy',
 
     'MeanAbsoluteError',
     'MeanSquaredError',
@@ -124,7 +93,6 @@ __all__ = [
     'FacialLandmarksPerPointNormedError',
     'FacialLandmarksNormedError',
     'PeakSignalToNoiseRatio',
-    'StructuralSimilarity',
     'AngleError',
 
     'MultiLabelAccuracy',
@@ -141,27 +109,13 @@ __all__ = [
 
     'MSCOCOAveragePrecision',
     'MSCOCORecall',
-    'MSCOCOKeypointsPrecision',
-    'MSCOCOKeypointsRecall',
     'MSCOCOorigAveragePrecision',
     'MSCOCOorigRecall',
     'MSCOCOOrigSegmAveragePrecision',
     'MSCOCOorigSegmRecall',
-    'MSCOCOOrigKeyPointsAveragePrecision',
 
     'HitRatioMetric',
     'NDSGMetric',
 
-    'BilingualEvaluationUnderstudy',
-
-    'ScoreF1',
-    'ExactMatchScore',
-
-    'MpjpeMultiperson',
-
-    'ScorePerplexity',
-
-    'AttributeClassificationRecall',
-    'AttributeClassificationPrecision',
-    'AttributeClassificationAccuracy'
+    'BilingualEvaluationUnderstudy'
 ]

@@ -29,7 +29,7 @@ try:
     from .mxnet_launcher import MxNetLauncher
 except ImportError as import_error:
     MxNetLauncher = unsupported_launcher(
-        'mxnet', "MXNet isn't installed. Please, install it before using.\n{}".format(import_error.msg)
+        'mxnet', "MxNet isn't installed. Please, install it before using.\n{}".format(import_error.msg)
     )
 
 try:
@@ -62,8 +62,6 @@ except ImportError as import_error:
         'onnx_runtime', "ONNX Runtime isn't installed. Please, install it before using. \n{}".format(import_error.msg)
     )
 
-from .pytorch_launcher import PyTorchLauncher
-
 __all__ = [
     'create_launcher',
     'Launcher',
@@ -74,7 +72,6 @@ __all__ = [
     'DLSDKLauncher',
     'OpenCVLauncher',
     'ONNXLauncher',
-    'PyTorchLauncher',
     'DummyLauncher',
     'InputFeeder'
 ]

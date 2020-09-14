@@ -14,8 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
-import warnings
 from collections import defaultdict, namedtuple
+from sklearn.metrics import auc, precision_recall_curve
+# noinspection PyProtectedMember
+from sklearn.metrics.base import _average_binary_score
 import numpy as np
 
 from ..representation import (
@@ -26,31 +28,7 @@ from ..representation import (
 from ..config import BaseField, BoolField, NumberField
 from .metric import FullDatasetEvaluationMetric
 
-try:
-    from sklearn.metrics import auc, precision_recall_curve
-except ImportError:
-    auc, precision_recall_curve = None, None
-
 PairDesc = namedtuple('PairDesc', 'image1 image2 same')
-
-def _average_binary_score(binary_metric, y_true, y_score):
-    def binary_target(y):
-        return not (len(np.unique(y)) > 2) or (y.ndim >= 2 and len(y[0]) > 1)
-
-    if binary_target(y_true):
-        return binary_metric(y_true, y_score)
-
-    y_true = y_true.ravel()
-    y_score = y_score.ravel()
-
-    n_classes = y_score.shape[1]
-    score = np.zeros((n_classes,))
-    for c in range(n_classes):
-        y_true_c = y_true.take([c], axis=1).ravel()
-        y_score_c = y_score.take([c], axis=1).ravel()
-        score[c] = binary_metric(y_true_c, y_score_c)
-
-    return score
 
 
 class CMCScore(FullDatasetEvaluationMetric):
@@ -105,9 +83,6 @@ class CMCScore(FullDatasetEvaluationMetric):
 
     def evaluate(self, annotations, predictions):
         dist_matrix = distance_matrix(annotations, predictions)
-        if np.size(dist_matrix) == 0:
-            warnings.warn('Gallery and query ids are not matched. CMC score can not be calculated.')
-            return 0
         gallery_cameras, gallery_pids, query_cameras, query_pids = get_gallery_query_pids(annotations)
 
         _cmc_score = eval_cmc(
@@ -149,9 +124,6 @@ class ReidMAP(FullDatasetEvaluationMetric):
 
     def evaluate(self, annotations, predictions):
         dist_matrix = distance_matrix(annotations, predictions)
-        if np.size(dist_matrix) == 0:
-            warnings.warn('Gallery and query ids are not matched. ReID mAP can not be calculated.')
-            return 0
         gallery_cameras, gallery_pids, query_cameras, query_pids = get_gallery_query_pids(annotations)
 
         return eval_map(
@@ -183,8 +155,6 @@ class PairwiseAccuracy(FullDatasetEvaluationMetric):
 
     def evaluate(self, annotations, predictions):
         embed_distances, pairs = get_embedding_distances(annotations, predictions)
-        if not pairs:
-            return np.nan
 
         min_score = self.min_score
         if min_score == 'train_median':
@@ -214,20 +184,17 @@ class PairwiseAccuracySubsets(FullDatasetEvaluationMetric):
 
     @classmethod
     def parameters(cls):
-        params = super().parameters()
-        params.update({
+        parameters = super().parameters()
+        parameters.update({
             'subset_number': NumberField(
                 optional=True, min_value=1, value_type=int, default=10, description="Number of subsets for separating."
             )
         })
-        return params
+        return parameters
 
     def configure(self):
         self.subset_num = self.get_value_from_config('subset_number')
-        config_copy = self.config.copy()
-        if 'subset_number' in config_copy:
-            config_copy.pop('subset_number')
-        self.accuracy_metric = PairwiseAccuracy(config_copy, self.dataset)
+        self.accuracy_metric = PairwiseAccuracy(self.config, self.dataset)
 
     def evaluate(self, annotations, predictions):
         subset_results = []
@@ -244,10 +211,9 @@ class PairwiseAccuracySubsets(FullDatasetEvaluationMetric):
             train_subset = self.mark_subset(train_subset)
 
             subset_result = self.accuracy_metric.evaluate(test_subset+train_subset, predictions)
-            if not np.isnan(subset_result):
-                subset_results.append(subset_result)
+            subset_results.append(subset_result)
 
-        return np.mean(subset_results) if subset_results else 0
+        return np.mean(subset_results)
 
     @staticmethod
     def make_subsets(subset_num, dataset_size):
@@ -280,125 +246,10 @@ class PairwiseAccuracySubsets(FullDatasetEvaluationMetric):
 
         return subset
 
-class FaceRecognitionTAFAPairMetric(FullDatasetEvaluationMetric):
-    __provider__ = 'face_recognition_tafa_pair_metric'
-
-    annotation_types = (ReIdentificationAnnotation, )
-    prediction_types = (ReIdentificationPrediction, )
-
-    @classmethod
-    def parameters(cls):
-        parameters = super().parameters()
-        parameters.update({
-            'threshold': NumberField(
-                value_type=float,
-                min_value=0,
-                optional=False,
-                description='Threshold value to identify pair of faces as matched'
-            )
-        })
-        return parameters
-
-    def configure(self):
-        self.threshold = self.get_value_from_config('threshold')
-
-    def submit_all(self, annotations, predictions):
-        return self.evaluate(annotations, predictions)
-
-    def evaluate(self, annotations, predictions):
-        tp = fp = tn = fn = 0
-        pairs = regroup_pairs(annotations, predictions)
-
-        for pair in pairs:
-            # Dot product of embeddings
-            prediction = np.dot(predictions[pair.image1].embedding, predictions[pair.image2].embedding)
-
-            # Similarity scale-shift
-            prediction = (prediction + 1) / 2
-
-            # Calculate metrics
-            if pair.same: # Pairs that match
-                if prediction > self.threshold:
-                    tp += 1
-                else:
-                    fp += 1
-            else:
-                if prediction < self.threshold:
-                    tn += 1
-                else:
-                    fn += 1
-
-        return [(tp+tn) / (tp+fp+tn+fn)]
-
-class NormalizedEmbeddingAccuracy(FullDatasetEvaluationMetric):
-    """
-    Accuracy score calculated with normalized embedding dot products
-    """
-    __provider__ = 'normalized_embedding_accuracy'
-
-    annotation_types = (ReIdentificationAnnotation, )
-    prediction_types = (ReIdentificationPrediction, )
-
-    def submit_all(self, annotations, predictions):
-        return self.evaluate(annotations, predictions)
-
-    def evaluate(self, annotations, predictions):
-        true_positive = false_positive = 0
-        gallery_embeddings = extract_embeddings(annotations, predictions, query=False)
-        query_start_idx = len(gallery_embeddings)
-
-        for ann, pred in zip(annotations[query_start_idx:], predictions[query_start_idx:]):
-            best_sim = 0
-            pred_person_id = -1
-
-            person_id = ann.person_id
-            camera_id = ann.camera_id
-
-            for j, gallery_embedding in enumerate(gallery_embeddings):
-                gallery_person_id = annotations[j].person_id
-                gallery_camera_id = annotations[j].camera_id
-
-                if person_id == gallery_person_id and camera_id == gallery_camera_id:
-                    continue
-
-                normalized_dot = np.linalg.norm(gallery_embedding) * np.linalg.norm(pred.embedding)
-                sim = np.dot(gallery_embedding, pred.embedding) / normalized_dot
-
-                if best_sim < sim:
-                    best_sim = sim
-                    pred_person_id = gallery_person_id
-
-            if pred_person_id == ann.person_id:
-                true_positive += 1
-            else:
-                false_positive += 1
-
-        if (true_positive + false_positive) == 0:
-            return [0]
-
-        accuracy = true_positive / (true_positive + false_positive)
-        return [accuracy]
-
-def regroup_pairs(annotations, predictions):
-    image_indexes = {}
-
-    for i, pred in enumerate(predictions):
-        image_indexes[pred.identifier] = i
-        pairs = []
-
-    for image1 in annotations:
-        for image2 in image1.positive_pairs:
-            if image2 in image_indexes:
-                pairs.append(PairDesc(image_indexes[image1.identifier], image_indexes[image2], True))
-        for image2 in image1.negative_pairs:
-            if image2 in image_indexes:
-                pairs.append(PairDesc(image_indexes[image1.identifier], image_indexes[image2], False))
-
-    return pairs
 
 def extract_embeddings(annotation, prediction, query):
-    embeddings = [pred.embedding for pred, ann in zip(prediction, annotation) if ann.query == query]
-    return np.stack(embeddings) if embeddings else embeddings
+    return np.stack([pred.embedding for pred, ann in zip(prediction, annotation) if ann.query == query])
+
 
 def get_gallery_query_pids(annotation):
     gallery_pids = np.asarray([ann.person_id for ann in annotation if not ann.query])
@@ -412,9 +263,8 @@ def get_gallery_query_pids(annotation):
 def distance_matrix(annotation, prediction):
     gallery_embeddings = extract_embeddings(annotation, prediction, query=False)
     query_embeddings = extract_embeddings(annotation, prediction, query=True)
-    not_empty = np.size(gallery_embeddings) > 0 and np.size(query_embeddings) > 0
 
-    return 1. - np.matmul(gallery_embeddings, np.transpose(query_embeddings)).T if not_empty else []
+    return 1. - np.matmul(gallery_embeddings, np.transpose(query_embeddings)).T
 
 
 def unique_sample(ids_dict, num):
@@ -528,28 +378,20 @@ def get_embedding_distances(annotation, prediction, train=False):
         if train != image1.metadata.get("train", False):
             continue
 
-        if image1.identifier not in image_indexes:
-            continue
-
         for image2 in image1.positive_pairs:
-            if image2 in image_indexes:
-                pairs.append(PairDesc(image_indexes[image1.identifier], image_indexes[image2], True))
+            pairs.append(PairDesc(image_indexes[image1.identifier], image_indexes[image2], True))
         for image2 in image1.negative_pairs:
-            if image2 in image_indexes:
-                pairs.append(PairDesc(image_indexes[image1.identifier], image_indexes[image2], False))
+            pairs.append(PairDesc(image_indexes[image1.identifier], image_indexes[image2], False))
 
-    if pairs:
-        embed1 = np.asarray([prediction[idx].embedding for idx, _, _ in pairs])
-        embed2 = np.asarray([prediction[idx].embedding for _, idx, _ in pairs])
-        return 0.5 * (1 - np.sum(embed1 * embed2, axis=1)), pairs
-    return None, pairs
+    embed1 = np.asarray([prediction[idx].embedding for idx, _, _ in pairs])
+    embed2 = np.asarray([prediction[idx].embedding for _, idx, _ in pairs])
+
+    return 0.5 * (1 - np.sum(embed1 * embed2, axis=1)), pairs
 
 
 def binary_average_precision(y_true, y_score, interpolated_auc=True):
-    if auc is None:
-        raise ValueError('please install sklearn')
-    def _average_precision(y_true_, y_score_):
-        precision, recall, _ = precision_recall_curve(y_true_, y_score_)
+    def _average_precision(y_true_, y_score_, sample_weight=None):
+        precision, recall, _ = precision_recall_curve(y_true_, y_score_, sample_weight)
         if not interpolated_auc:
             # Return the step function integral
             # The following works because the last entry of precision is
@@ -558,4 +400,4 @@ def binary_average_precision(y_true, y_score, interpolated_auc=True):
 
         return auc(recall, precision)
 
-    return _average_binary_score(_average_precision, y_true, y_score)
+    return _average_binary_score(_average_precision, y_true, y_score, average="macro")

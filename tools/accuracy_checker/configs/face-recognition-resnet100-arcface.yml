@@ -6,12 +6,19 @@ models:
         model: public/face-recognition-resnet100-arcface/model-r100-ii/model-0000.params
         adapter: reid
         inputs:
-          - name: data
-            type: INPUT
-            shape: 3, 112, 112
+        - name: data
+          type: INPUT
+          shape: 3, 112, 112
+
 
     datasets:
       - name: lfw
+        data_source: LFW/lfw
+        annotation_conversion:
+          converter: lfw
+          pairs_file: LFW/annotation/pairs.txt
+          landmarks_file: LFW/annotation/lfw_landmark.txt
+        annotation: lfw.pickle
 
         preprocessing:
           - type: bgr_to_rgb
@@ -33,15 +40,14 @@ models:
         weights: public/face-recognition-resnet100-arcface/FP32/face-recognition-resnet100-arcface.bin
         adapter: reid
 
-      - framework: dlsdk
-        tags:
-          - FP16
-        model:   public/face-recognition-resnet100-arcface/FP16/face-recognition-resnet100-arcface.xml
-        weights: public/face-recognition-resnet100-arcface/FP16/face-recognition-resnet100-arcface.bin
-        adapter: reid
-
     datasets:
       - name: lfw
+        data_source: LFW/lfw
+        annotation_conversion:
+          converter: lfw
+          pairs_file: LFW/annotation/pairs.txt
+          landmarks_file: LFW/annotation/lfw_landmark.txt
+        annotation: lfw.pickle
 
         preprocessing:
           - type: point_alignment
@@ -49,4 +55,5 @@ models:
           - type: resize
             size: 112
 
-global_definitions: ../dataset_definitions.yml
+        metrics:
+          - type: pairwise_accuracy_subsets

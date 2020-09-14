@@ -26,14 +26,10 @@ from .data_reader import (
     NiftiImageReader,
     TensorflowImageReader,
     AnnotationFeaturesReader,
-    WavReader,
-    DicomReader,
 
     DataRepresentation,
     ClipIdentifier,
-    MultiFramesInputIdentifier,
-    create_reader,
-    REQUIRES_ANNOTATIONS
+    create_reader
 )
 
 __all__ = [
@@ -49,12 +45,8 @@ __all__ = [
     'NiftiImageReader',
     'TensorflowImageReader',
     'AnnotationFeaturesReader',
-    'WavReader',
-    'DicomReader',
 
     'DataRepresentation',
     'ClipIdentifier',
-    'MultiFramesInputIdentifier',
-    'create_reader',
-    'REQUIRES_ANNOTATIONS'
+    'create_reader'
 ]

@@ -28,15 +28,15 @@ class CVATAttributesRecognitionConverter(FileBasedAnnotationConverter):
 
     @classmethod
     def parameters(cls):
-        configuration_parameters = super().parameters()
-        configuration_parameters.update({
+        parameters = super().parameters()
+        parameters.update({
             'label': StringField(description='specific label for attribute collection'),
             'images_dir': PathField(
                 is_directory=True, optional=True,
                 description='path to dataset images, used only for content existence check'
             )
         })
-        return configuration_parameters
+        return parameters
 
     def configure(self):
         super().configure()

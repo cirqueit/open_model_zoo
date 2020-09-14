@@ -16,7 +16,7 @@ models:
           - type: normalization
             mean: 104, 117, 123
 
-  - name: se-resnet-101
+  - name: se-resnet-50
     launchers:
       - framework: dlsdk
         tags:
@@ -39,5 +39,3 @@ models:
             size: 256
           - type: crop
             size: 224
-
-global_definitions: ../dataset_definitions.yml

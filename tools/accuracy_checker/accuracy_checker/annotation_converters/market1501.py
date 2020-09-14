@@ -14,6 +14,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 
+from __future__ import absolute_import, print_function
+
 import re
 
 from ._reid_common import check_dirs, read_directory, ReIdentificationAnnotation
@@ -31,12 +33,8 @@ class Market1501Converter(DirectoryBasedAnnotationConverter):
         query = self.data_dir / 'query'
 
         check_dirs((gallery, query), self.data_dir)
-        gallery_images, gallery_pids = read_directory(
-            gallery, query=False, image_pattern=MARKET_IMAGE_PATTERN, descent_order=True
-        )
-        query_images, query_pids = read_directory(
-            query, query=True, image_pattern=MARKET_IMAGE_PATTERN, descent_order=True
-        )
+        gallery_images, gallery_pids = read_directory(gallery, query=False, image_pattern=MARKET_IMAGE_PATTERN)
+        query_images, query_pids = read_directory(query, query=True, image_pattern=MARKET_IMAGE_PATTERN)
         annotation = gallery_images + query_images
 
         meta = {'num_identities': len(gallery_pids | query_pids)}

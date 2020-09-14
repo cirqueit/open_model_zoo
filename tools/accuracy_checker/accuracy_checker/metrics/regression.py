@@ -16,7 +16,6 @@ limitations under the License.
 
 import warnings
 import math
-from functools import singledispatch
 import numpy as np
 
 from ..representation import (
@@ -24,20 +23,10 @@ from ..representation import (
     RegressionPrediction,
     FacialLandmarksAnnotation,
     FacialLandmarksPrediction,
-    FacialLandmarks3DAnnotation,
-    FacialLandmarks3DPrediction,
     SuperResolutionAnnotation,
     SuperResolutionPrediction,
     GazeVectorAnnotation,
-    GazeVectorPrediction,
-    DepthEstimationAnnotation,
-    DepthEstimationPrediction,
-    ImageInpaintingAnnotation,
-    ImageInpaintingPrediction,
-    ImageProcessingAnnotation,
-    ImageProcessingPrediction,
-    StyleTransferAnnotation,
-    StyleTransferPrediction
+    GazeVectorPrediction
 )
 
 from .metric import PerImageEvaluationMetric
@@ -46,38 +35,19 @@ from ..utils import string_to_tuple, finalize_metric_result
 
 
 class BaseRegressionMetric(PerImageEvaluationMetric):
-    annotation_types = (RegressionAnnotation, DepthEstimationAnnotation)
-    prediction_types = (RegressionPrediction, DepthEstimationPrediction)
+    annotation_types = (RegressionAnnotation, )
+    prediction_types = (RegressionPrediction, )
 
     def __init__(self, value_differ, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.value_differ = value_differ
-        self.calculate_diff = singledispatch(self._calculate_diff_regression_rep)
-        self.calculate_diff.register(DepthEstimationAnnotation, self._calculate_diff_depth_estimation_rep)
 
     def configure(self):
-        self.meta.update({
-            'names': ['mean', 'std'], 'scale': 1, 'postfix': ' ', 'calculate_mean': False, 'target': 'higher-worse'
-        })
+        self.meta.update({'names': ['mean', 'std'], 'scale': 1, 'postfix': ' ', 'calculate_mean': False})
         self.magnitude = []
 
     def update(self, annotation, prediction):
-        diff = self.calculate_diff(annotation, prediction)
-        self.magnitude.append(diff)
-
-        return diff
-
-    def _calculate_diff_regression_rep(self, annotation, prediction):
-        return self.value_differ(annotation.value, prediction.value)
-
-    def _calculate_diff_depth_estimation_rep(self, annotation, prediction):
-        diff = annotation.mask * self.value_differ(annotation.depth_map, prediction.depth_map)
-        ret = 0
-
-        if np.sum(annotation.mask) > 0:
-            ret = np.sum(diff) / np.sum(annotation.mask)
-
-        return ret
+        self.magnitude.append(self.value_differ(annotation.value, prediction.value))
 
     def evaluate(self, annotations, predictions):
         return np.mean(self.magnitude), np.std(self.magnitude)
@@ -120,7 +90,7 @@ class BaseRegressionOnIntervals(PerImageEvaluationMetric):
         self.value_differ = value_differ
 
     def configure(self):
-        self.meta.update({'scale': 1, 'postfix': ' ', 'calculate_mean': False, 'target': 'higher-worse'})
+        self.meta.update({'scale': 1, 'postfix': ' ', 'calculate_mean': False})
         self.ignore_out_of_range = self.get_value_from_config('ignore_values_not_in_interval')
 
         self.intervals = self.get_value_from_config('intervals')
@@ -138,14 +108,22 @@ class BaseRegressionOnIntervals(PerImageEvaluationMetric):
 
         self.intervals = np.unique(self.intervals)
         self.magnitude = [[] for _ in range(len(self.intervals) + 1)]
-        self._create_meta()
+
+        self.meta['names'] = ([])
+        if not self.ignore_out_of_range:
+            self.meta['names'] = (['mean: < ' + str(self.intervals[0]), 'std: < ' + str(self.intervals[0])])
+
+        for index in range(len(self.intervals) - 1):
+            self.meta['names'].append('mean: <= ' + str(self.intervals[index]) + ' < ' + str(self.intervals[index + 1]))
+            self.meta['names'].append('std: <= ' + str(self.intervals[index]) + ' < ' + str(self.intervals[index + 1]))
+
+        if not self.ignore_out_of_range:
+            self.meta['names'].append('mean: > ' + str(self.intervals[-1]))
+            self.meta['names'].append('std: > ' + str(self.intervals[-1]))
 
     def update(self, annotation, prediction):
         index = find_interval(annotation.value, self.intervals)
-        diff = self.value_differ(annotation.value, prediction.value)
-        self.magnitude[index].append(diff)
-
-        return diff
+        self.magnitude[index].append(self.value_differ(annotation.value, prediction.value))
 
     def evaluate(self, annotations, predictions):
         if self.ignore_out_of_range:
@@ -160,22 +138,8 @@ class BaseRegressionOnIntervals(PerImageEvaluationMetric):
 
         return result
 
-    def _create_meta(self):
-        self.meta['names'] = ([])
-        if not self.ignore_out_of_range:
-            self.meta['names'] = (['mean: < ' + str(self.intervals[0]), 'std: < ' + str(self.intervals[0])])
-
-        for index in range(len(self.intervals) - 1):
-            self.meta['names'].append('mean: <= ' + str(self.intervals[index]) + ' < ' + str(self.intervals[index + 1]))
-            self.meta['names'].append('std: <= ' + str(self.intervals[index]) + ' < ' + str(self.intervals[index + 1]))
-
-        if not self.ignore_out_of_range:
-            self.meta['names'].append('mean: > ' + str(self.intervals[-1]))
-            self.meta['names'].append('std: > ' + str(self.intervals[-1]))
-
     def reset(self):
         self.magnitude = [[] for _ in range(len(self.intervals) + 1)]
-        self._create_meta()
 
 
 class MeanAbsoluteError(BaseRegressionMetric):
@@ -198,13 +162,8 @@ class RootMeanSquaredError(BaseRegressionMetric):
     def __init__(self, *args, **kwargs):
         super().__init__(mse_differ, *args, **kwargs)
 
-    def update(self, annotation, prediction):
-        rmse = np.sqrt(self.calculate_diff(annotation, prediction))
-        self.magnitude.append(rmse)
-        return rmse
-
     def evaluate(self, annotations, predictions):
-        return np.mean(self.magnitude), np.std(self.magnitude)
+        return np.sqrt(np.mean(self.magnitude)), np.sqrt(np.std(self.magnitude))
 
 
 class MeanAbsoluteErrorOnInterval(BaseRegressionOnIntervals):
@@ -227,10 +186,6 @@ class RootMeanSquaredErrorOnInterval(BaseRegressionOnIntervals):
     def __init__(self, *args, **kwargs):
         super().__init__(mse_differ, *args, **kwargs)
 
-    def update(self, annotation, prediction):
-        mse = super().update(annotation, prediction)
-        return np.sqrt(mse)
-
     def evaluate(self, annotations, predictions):
         if self.ignore_out_of_range:
             self.magnitude = self.magnitude[1:-1]
@@ -252,13 +207,11 @@ class RootMeanSquaredErrorOnInterval(BaseRegressionOnIntervals):
 class FacialLandmarksPerPointNormedError(PerImageEvaluationMetric):
     __provider__ = 'per_point_normed_error'
 
-    annotation_types = (FacialLandmarksAnnotation, FacialLandmarks3DAnnotation)
-    prediction_types = (FacialLandmarksPrediction, FacialLandmarks3DPrediction)
+    annotation_types = (FacialLandmarksAnnotation, )
+    prediction_types = (FacialLandmarksPrediction, )
 
     def configure(self):
-        self.meta.update({
-            'scale': 1, 'postfix': ' ', 'calculate_mean': True, 'data_format': '{:.4f}', 'target': 'higher-worse'
-        })
+        self.meta.update({'scale': 1, 'postfix': ' ', 'calculate_mean': True, 'data_format': '{:.4f}'})
         self.magnitude = []
 
     def update(self, annotation, prediction):
@@ -267,8 +220,6 @@ class FacialLandmarksPerPointNormedError(PerImageEvaluationMetric):
         )
         result /= np.maximum(annotation.interocular_distance, np.finfo(np.float64).eps)
         self.magnitude.append(result)
-
-        return result
 
     def evaluate(self, annotations, predictions):
         num_points = np.shape(self.magnitude)[1]
@@ -286,8 +237,8 @@ class FacialLandmarksPerPointNormedError(PerImageEvaluationMetric):
 class FacialLandmarksNormedError(PerImageEvaluationMetric):
     __provider__ = 'normed_error'
 
-    annotation_types = (FacialLandmarksAnnotation, FacialLandmarks3DAnnotation)
-    prediction_types = (FacialLandmarksPrediction, FacialLandmarks3DPrediction)
+    annotation_types = (FacialLandmarksAnnotation, )
+    prediction_types = (FacialLandmarksPrediction, )
 
     @classmethod
     def parameters(cls):
@@ -312,7 +263,7 @@ class FacialLandmarksNormedError(PerImageEvaluationMetric):
             'postfix': ' ',
             'calculate_mean': not self.calculate_std or not self.percentile,
             'data_format': '{:.4f}',
-            'target': 'higher-worse'
+            'names': ['mean']
         })
         self.magnitude = []
 
@@ -324,10 +275,7 @@ class FacialLandmarksNormedError(PerImageEvaluationMetric):
         avg_result /= np.maximum(annotation.interocular_distance, np.finfo(np.float64).eps)
         self.magnitude.append(avg_result)
 
-        return avg_result
-
     def evaluate(self, annotations, predictions):
-        self.meta['names'] = ['mean']
         result = [np.mean(self.magnitude)]
 
         if self.calculate_std:
@@ -341,52 +289,6 @@ class FacialLandmarksNormedError(PerImageEvaluationMetric):
             self.meta['names'].append('{}th percentile'.format(self.percentile))
 
         return result
-
-    def reset(self):
-        self.magnitude = []
-
-
-class NormalizedMeanError(PerImageEvaluationMetric):
-    __provider__ = 'nme'
-    annotation_types = (FacialLandmarks3DAnnotation, )
-    prediction_types = (FacialLandmarks3DPrediction, )
-
-    @classmethod
-    def parameters(cls):
-        parameters = super().parameters()
-        parameters.update({
-            'only_2d': BoolField(
-                optional=True, default=False, description="Allows metric calculation only across x and y dimensions"
-            ),
-        })
-
-        return parameters
-
-    def configure(self):
-        self.meta.update({
-            'scale': 1,
-            'postfix': ' ',
-            'data_format': '{:.4f}',
-            'target': 'higher-worse'
-        })
-        self.only_2d = self.get_value_from_config('only_2d')
-        self.magnitude = []
-
-    def update(self, annotation, prediction):
-        gt = np.array([annotation.x_values, annotation.y_values, annotation.z_values]).T
-        pred = np.array([prediction.x_values, prediction.y_values, prediction.z_values]).T
-
-        diff = np.square(gt - pred)
-        dist = np.sqrt(np.sum(diff[:, 0:2], axis=1)) if self.only_2d else np.sqrt(np.sum(diff, axis=1))
-        #dist /= len(gt)
-        normalized_result = dist / annotation.normalization_coef(self.only_2d)
-        self.magnitude.append(np.mean(normalized_result))
-
-        return np.mean(normalized_result)
-
-    def evaluate(self, annotations, predictions):
-        self.meta['names'] = ['mean']
-        return np.mean(self.magnitude)
 
     def reset(self):
         self.magnitude = []
@@ -415,9 +317,6 @@ def find_interval(value, intervals):
 
 
 def point_regression_differ(annotation_val_x, annotation_val_y, prediction_val_x, prediction_val_y):
-    if len(np.shape(prediction_val_x)) == 2:
-        prediction_val_x = prediction_val_x[0]
-        prediction_val_y = prediction_val_y[0]
     loss = np.subtract(list(zip(annotation_val_x, annotation_val_y)), list(zip(prediction_val_x, prediction_val_y)))
     return np.linalg.norm(loss, 2, axis=1)
 
@@ -425,10 +324,8 @@ def point_regression_differ(annotation_val_x, annotation_val_y, prediction_val_x
 class PeakSignalToNoiseRatio(BaseRegressionMetric):
     __provider__ = 'psnr'
 
-    annotation_types = (SuperResolutionAnnotation, ImageInpaintingAnnotation, ImageProcessingAnnotation,
-                        StyleTransferAnnotation)
-    prediction_types = (SuperResolutionPrediction, ImageInpaintingPrediction, ImageProcessingPrediction,
-                        StyleTransferPrediction)
+    annotation_types = (SuperResolutionAnnotation, )
+    prediction_types = (SuperResolutionPrediction, )
 
     @classmethod
     def parameters(cls):
@@ -445,7 +342,6 @@ class PeakSignalToNoiseRatio(BaseRegressionMetric):
 
     def __init__(self, *args, **kwargs):
         super().__init__(self._psnr_differ, *args, **kwargs)
-        self.meta['target'] = 'higher-better'
 
     def configure(self):
         super().configure()
@@ -501,31 +397,3 @@ class AngleError(BaseRegressionMetric):
 
     def __init__(self, *args, **kwargs):
         super().__init__(angle_differ, *args, **kwargs)
-
-
-def _ssim(annotation_image, prediction_image):
-    prediction = np.asarray(prediction_image)
-    ground_truth = np.asarray(annotation_image)
-    if len(ground_truth.shape) < len(prediction) and prediction.shape[-1] == 1:
-        prediction = np.squeeze(prediction)
-    mu_x = np.mean(prediction)
-    mu_y = np.mean(ground_truth)
-    var_x = np.var(prediction)
-    var_y = np.var(ground_truth)
-    sig_xy = np.mean((prediction - mu_x)*(ground_truth - mu_y))/(np.sqrt(var_x*var_y))
-    c1 = (0.01 * 2**32-1)**2
-    c2 = (0.03 * 2**32-1)**2
-    mssim = (2*mu_x*mu_y + c1)*(2*sig_xy + c2)/((mu_x**2 + mu_y**2 + c1)*(var_x + var_y + c2))
-    return mssim
-
-
-class StructuralSimilarity(BaseRegressionMetric):
-    __provider__ = 'ssim'
-    annotation_types = (ImageInpaintingAnnotation, ImageProcessingAnnotation, SuperResolutionAnnotation,
-                        StyleTransferAnnotation)
-    prediction_types = (ImageInpaintingPrediction, ImageProcessingPrediction, SuperResolutionPrediction,
-                        StyleTransferPrediction)
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(_ssim, *args, **kwargs)
-        self.meta['target'] = 'higher-better'

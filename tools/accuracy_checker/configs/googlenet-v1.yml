@@ -32,20 +32,6 @@ models:
         weights: public/googlenet-v1/FP16/googlenet-v1.bin
         adapter: classification
 
-      - framework: dlsdk
-        tags:
-          - FP32-INT8
-        model:   public/googlenet-v1/FP32-INT8/googlenet-v1.xml
-        weights: public/googlenet-v1/FP32-INT8/googlenet-v1.bin
-        adapter: classification
-
-      - framework: dlsdk
-        tags:
-          - FP16-INT8
-        model:   public/googlenet-v1/FP16-INT8/googlenet-v1.xml
-        weights: public/googlenet-v1/FP16-INT8/googlenet-v1.bin
-        adapter: classification
-
     datasets:
       - name: imagenet_1000_classes
         preprocessing:
@@ -53,5 +39,3 @@ models:
             size: 256
           - type: crop
             size: 224
-
-global_definitions: ../dataset_definitions.yml

@@ -103,7 +103,7 @@ class TestOpenCVLauncherConfig:
             'inputs': [{'name': 'data', 'type': 'INPUT'}]
         }
         with pytest.raises(ConfigError):
-            create_launcher(config, 'model')
+            create_launcher(config)
 
     def test_missed_device_in_create_opencv_launcher_raises_config_error_exception(self):
         config = {

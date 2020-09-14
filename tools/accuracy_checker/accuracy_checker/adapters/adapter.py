@@ -100,13 +100,16 @@ def create_adapter(adapter_config, launcher=None, dataset=None):
         metadata = dataset.metadata
         if metadata:
             label_map = dataset.metadata.get('label_map')
+    launcher_config = launcher.config if launcher else None
     if isinstance(adapter_config, str):
-        adapter = Adapter.provide(adapter_config, {'type': adapter_config}, label_map=label_map)
+        if not launcher_config:
+            launcher_config = {'type': adapter_config}
+        adapter = Adapter.provide(adapter_config, launcher_config, label_map=label_map)
     elif isinstance(adapter_config, dict):
         adapter = Adapter.provide(adapter_config['type'], adapter_config, label_map=label_map)
     else:
         raise ConfigError('Unknown type for adapter configuration')
-
     if launcher:
         adapter.output_blob = launcher.output_blob
+
     return adapter

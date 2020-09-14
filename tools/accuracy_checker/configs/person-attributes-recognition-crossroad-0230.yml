@@ -33,5 +33,3 @@ models:
           - type: f1-score
             calculate_average: False
             presenter: print_vector
-
-global_definitions: ../dataset_definitions.yml
