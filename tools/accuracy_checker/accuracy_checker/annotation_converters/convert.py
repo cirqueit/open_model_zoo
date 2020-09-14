@@ -15,6 +15,8 @@ limitations under the License.
 """
 
 import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 import copy
 import json
