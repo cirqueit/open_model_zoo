@@ -1,0 +1,98 @@
+On branch 2020.4.cal
+Your branch is up to date with 'origin/2020.4.cal'.
+
+Changes to be committed:
+  (use "git reset HEAD <file>..." to unstage)
+
+	modified:   adapters/README.md
+	modified:   adapters/__init__.py
+	modified:   adapters/action_recognition.py
+	modified:   adapters/adapter.py
+	modified:   adapters/attributes_recognition.py
+	modified:   adapters/classification.py
+	modified:   adapters/detection.py
+	modified:   adapters/image_processing.py
+	modified:   adapters/mask_rcnn.py
+	modified:   adapters/nlp.py
+	modified:   adapters/pose_estimation.py
+	modified:   adapters/segmentation.py
+	modified:   adapters/text_detection.py
+	modified:   annotation_converters/README.md
+	modified:   annotation_converters/__init__.py
+	modified:   annotation_converters/_reid_common.py
+	modified:   annotation_converters/brats.py
+	modified:   annotation_converters/camvid.py
+	modified:   annotation_converters/cityscapes.py
+	modified:   annotation_converters/common_semantic_segmentation.py
+	modified:   annotation_converters/convert.py
+	modified:   annotation_converters/cvat_age_gender_recognition.py
+	modified:   annotation_converters/cvat_attributes_recognition.py
+	modified:   annotation_converters/cvat_facial_landmarks.py
+	modified:   annotation_converters/cvat_human_pose.py
+	modified:   annotation_converters/cvat_multilabel_recognition.py
+	modified:   annotation_converters/cvat_object_detection.py
+	modified:   annotation_converters/cvat_person_detection_action_recognition.py
+	modified:   annotation_converters/cvat_text_recognition.py
+	modified:   annotation_converters/detection_opencv_storage.py
+	modified:   annotation_converters/format_converter.py
+	modified:   annotation_converters/icdar.py
+	modified:   annotation_converters/imagenet.py
+	modified:   annotation_converters/lfw.py
+	modified:   annotation_converters/lpr.py
+	modified:   annotation_converters/market1501.py
+	modified:   annotation_converters/mars.py
+	modified:   annotation_converters/mnist.py
+	modified:   annotation_converters/ms_coco.py
+	modified:   annotation_converters/ncf_converter.py
+	modified:   annotation_converters/pascal_voc.py
+	modified:   annotation_converters/sample_converter.py
+	modified:   annotation_converters/super_resolution_converter.py
+	modified:   annotation_converters/vgg_face_regression.py
+	modified:   annotation_converters/wider.py
+	modified:   annotation_converters/wmt.py
+	modified:   data_readers/README.md
+	modified:   data_readers/__init__.py
+	modified:   data_readers/data_reader.py
+	modified:   postprocessor/README.md
+	modified:   postprocessor/__init__.py
+	modified:   postprocessor/cast_to_int.py
+	modified:   postprocessor/clip_boxes.py
+	modified:   postprocessor/clip_segmentation_mask.py
+	modified:   postprocessor/correct_yolo_v2_boxes.py
+	modified:   postprocessor/crop_segmentation_mask.py
+	modified:   postprocessor/encode_segmentation_mask.py
+	modified:   postprocessor/extend_segmentation_mask.py
+	modified:   postprocessor/faster_rcnn_postprocessing_resize.py
+	modified:   postprocessor/filter.py
+	modified:   postprocessor/nms.py
+	modified:   postprocessor/postprocessing_executor.py
+	modified:   postprocessor/postprocessor.py
+	modified:   postprocessor/resize_segmentation_mask.py
+	modified:   postprocessor/zoom_segmentation_mask.py
+	modified:   preprocessor/README.md
+	modified:   preprocessor/__init__.py
+	modified:   preprocessor/geometric_transformations.py
+	modified:   preprocessor/preprocessing_executor.py
+	modified:   preprocessor/preprocessor.py
+	modified:   representation/__init__.py
+	modified:   representation/base_representation.py
+	modified:   representation/character_recognition_representation.py
+	modified:   representation/classification_representation.py
+	modified:   representation/detection_representation.py
+	modified:   representation/multilabel_recognition.py
+	modified:   representation/nlp_representation.py
+	modified:   representation/pose_estimation_representation.py
+	modified:   representation/regression_representation.py
+	modified:   representation/representaton_container.py
+	modified:   representation/segmentation_representation.py
+	modified:   representation/super_resolution_representation.py
+	modified:   representation/text_detection_representation.py
+	modified:   utils.py
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+
+	../accuracy_checker.egg-info/
+	accuracy_checker.txt
+	../../downloader.egg-info/
+

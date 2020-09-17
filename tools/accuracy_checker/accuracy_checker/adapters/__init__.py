@@ -1,5 +1,5 @@
 """
-Copyright (c) 2019 Intel Corporation
+Copyright (c) 2019-2020 Intel Corporation
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,36 +20,64 @@ from .action_recognition import ActionDetection
 from .text_detection import (
     TextDetectionAdapter,
     TextProposalsDetectionAdapter,
-    EASTTextDetectionAdapter,
-    LPRAdapter,
-    BeamSearchDecoder
+    EASTTextDetectionAdapter
 )
 
-from .image_processing import SuperResolutionAdapter
+from .text_recognition import (
+    BeamSearchDecoder,
+    CTCGreedySearchDecoder,
+    LPRAdapter
+)
+
+from .image_processing import (
+    ImageProcessingAdapter, SuperResolutionAdapter, MultiSuperResolutionAdapter, SuperResolutionYUV
+)
 from .attributes_recognition import (
     HeadPoseEstimatorAdapter,
     VehicleAttributesRecognitionAdapter,
     PersonAttributesAdapter,
     AgeGenderAdapter,
     LandmarksRegressionAdapter,
-    GazeEstimationAdapter
+    GazeEstimationAdapter,
+    PRNetAdapter
 )
 
 from .reidentification import ReidAdapter
 from .detection import (
-    TinyYOLOv1Adapter, SSDAdapter, FacePersonAdapter, YoloV2Adapter, YoloV3Adapter, TFObjectDetectionAPIAdapter
+    TFObjectDetectionAPIAdapter,
+    MTCNNPAdapter,
+    RetinaNetAdapter,
+    ClassAgnosticDetectionAdapter,
+    FaceBoxesAdapter,
+    FaceDetectionAdapter,
+    FaceDetectionRefinementAdapter
 )
+from .detection_person_vehicle import PersonVehicleDetectionAdapter
+from .ssd import SSDAdapter, PyTorchSSDDecoder, FacePersonAdapter, SSDAdapterMxNet, SSDONNXAdapter
+from .retinaface import RetinaFaceAdapter
+from .yolo import TinyYOLOv1Adapter, YoloV2Adapter, YoloV3Adapter
 from .classification import ClassificationAdapter
 from .segmentation import SegmentationAdapter, BrainTumorSegmentationAdapter
 from .pose_estimation import HumanPoseAdapter
+from .pose_estimation_3d import HumanPose3dAdapter
 
 from .dummy_adapters import XML2DetectionAdapter
 
 from .hit_ratio import HitRatioAdapter
 
 from .mask_rcnn import MaskRCNNAdapter
+from .mask_rcnn_with_text import MaskRCNNWithTextAdapter
 
-from .nlp import MachineTranslationAdapter
+from .nlp import MachineTranslationAdapter, QuestionAnsweringAdapter
+
+from .centernet import CTDETAdapter
+
+from .mono_depth import MonoDepthAdapter
+
+from .image_inpainting import ImageInpaintingAdapter
+from .style_transfer import StyleTransferAdapter
+
+from .attribute_classification import AttributeClassificationAdapter
 
 __all__ = [
     'Adapter',
@@ -60,19 +88,26 @@ __all__ = [
 
     'ClassificationAdapter',
 
-    'SSDAdapter',
-    'TinyYOLOv1Adapter',
-    'YoloV2Adapter',
-    'YoloV3Adapter',
-    'FacePersonAdapter',
     'TFObjectDetectionAPIAdapter',
+    'MTCNNPAdapter',
+    'CTDETAdapter',
+    'RetinaNetAdapter',
+    'ClassAgnosticDetectionAdapter',
+    'RetinaFaceAdapter',
+    'FaceBoxesAdapter',
+    'FaceDetectionAdapter',
+    'FaceDetectionRefinementAdapter',
+    'PersonVehicleDetectionAdapter',
 
     'SegmentationAdapter',
     'BrainTumorSegmentationAdapter',
 
     'ReidAdapter',
 
+    'ImageProcessingAdapter',
     'SuperResolutionAdapter',
+    'MultiSuperResolutionAdapter',
+    'SuperResolutionYUV',
 
     'HeadPoseEstimatorAdapter',
     'VehicleAttributesRecognitionAdapter',
@@ -80,6 +115,7 @@ __all__ = [
     'AgeGenderAdapter',
     'LandmarksRegressionAdapter',
     'GazeEstimationAdapter',
+    'PRNetAdapter',
 
     'TextDetectionAdapter',
     'TextProposalsDetectionAdapter',
@@ -87,14 +123,25 @@ __all__ = [
 
     'BeamSearchDecoder',
     'LPRAdapter',
+    'CTCGreedySearchDecoder',
 
     'HumanPoseAdapter',
+    'HumanPose3dAdapter',
 
     'ActionDetection',
 
     'HitRatioAdapter',
 
     'MaskRCNNAdapter',
+    'MaskRCNNWithTextAdapter',
 
-    'MachineTranslationAdapter'
+    'MachineTranslationAdapter',
+    'QuestionAnsweringAdapter',
+
+    'MonoDepthAdapter',
+
+    'ImageInpaintingAdapter',
+    'StyleTransferAdapter',
+
+    'AttributeClassificationAdapter'
 ]

@@ -603,7 +603,12 @@ class DLSDKLauncher(Launcher):
                 if len(output_tuple) == 1:
                     return output_string
                 return tuple([output_tuple[0], int(output_tuple[1])])
-            preprocessed_outputs = [output_preprocessing(output) for output in outputs]
+
+            filtered = []
+            for layer in self.network.layers.values():
+                if layer.type in ['Const']:
+                    filtered.append(layer.name)
+            preprocessed_outputs = [output_preprocessing(output) for output in outputs if output not in filtered]
             self.network.add_outputs(preprocessed_outputs)
 
         if input_shapes is not None:

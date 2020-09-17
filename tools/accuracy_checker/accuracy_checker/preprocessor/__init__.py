@@ -16,21 +16,31 @@ limitations under the License.
 
 from .preprocessing_executor import PreprocessingExecutor
 from .preprocessor import Preprocessor
-from .color_spece_conversion import BgrToRgb, BgrToGray, TfConvertImageDType
+from .audio_preprocessing import ResampleAudio, ClipAudio, NormalizeAudio
+from .color_space_conversion import (
+    BgrToRgb, RgbToBgr, BgrToGray, RgbToGray, TfConvertImageDType, SelectInputChannel, BGR2YUVConverter
+)
 from .normalization import Normalize, Normalize3d
 from .geometric_transformations import (
     GeometricOperationMetadata,
-    Resize,
-    AutoResize,
     Flip,
     Crop,
     CropRect,
     ExtendAroundRect,
     PointAligner,
     Tiling,
-    Crop3D
+    Crop3D,
+    TransformedCropWithAutoScale,
+    ImagePyramid,
+    FaceDetectionImagePyramid,
+    WarpAffine,
+    FacePatch
 )
+from .resize import Resize, AutoResize
 from .nlp_preprocessors import DecodeByVocabulary, PadWithEOS
+from .centernet_preprocessing import CenterNetAffineTransformation
+from .brats_preprocessing import Resize3D, NormalizeBrats, CropBraTS, SwapModalitiesBrats
+from .inpainting_preprocessor import FreeFormMask, RectMask, CustomMask
 
 __all__ = [
     'PreprocessingExecutor',
@@ -38,7 +48,12 @@ __all__ = [
     'Preprocessor',
     'GeometricOperationMetadata',
 
+    'ResampleAudio',
+    'ClipAudio',
+    'NormalizeAudio',
+
     'Resize',
+    'Resize3D',
     'AutoResize',
     'Flip',
     'Crop',
@@ -47,14 +62,33 @@ __all__ = [
     'PointAligner',
     'Tiling',
     'Crop3D',
+    'CropBraTS',
+    'TransformedCropWithAutoScale',
+    'ImagePyramid',
+    'FaceDetectionImagePyramid',
+    'WarpAffine',
+    'FacePatch',
 
     'BgrToGray',
     'BgrToRgb',
+    'RgbToGray',
+    'RgbToBgr',
+    'BGR2YUVConverter',
     'TfConvertImageDType',
+    'SelectInputChannel',
 
     'Normalize3d',
     'Normalize',
+    'NormalizeBrats',
+
+    'SwapModalitiesBrats',
 
     'DecodeByVocabulary',
-    'PadWithEOS'
+    'PadWithEOS',
+
+    'CenterNetAffineTransformation',
+
+    'FreeFormMask',
+    'RectMask',
+    'CustomMask',
 ]

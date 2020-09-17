@@ -24,6 +24,7 @@ from ..representation import (DetectionAnnotation, DetectionPrediction, TextDete
                               TextDetectionPrediction, PoseEstimationPrediction, PoseEstimationAnnotation)
 from ..utils import in_interval, polygon_from_points, convert_to_range
 
+
 class FilterPostprocessor(PostprocessorWithSpecificTargets):
     __provider__ = 'filter'
 
@@ -127,6 +128,22 @@ class FilterByMinConfidence(BaseFilter):
 
         return filtered
 
+
+class FilterTopK(BaseFilter):
+    __provider__ = 'top_k'
+
+    def apply_filter(self, entry, top_k):
+        filtered = []
+
+        if isinstance(entry, DetectionAnnotation):
+            return filtered
+
+        if len(entry.scores) <= top_k:
+            return filtered
+        scores_inds = np.argsort(entry.scores)[::-1]
+        non_filtered = scores_inds[:int(top_k)]
+
+        return [ind for ind in range(len(entry.scores)) if ind not in non_filtered]
 
 class FilterByHeightRange(BaseFilter):
     __provider__ = 'height_range'
@@ -321,8 +338,8 @@ class FilterInvalidBoxes(BaseFilter):
     __provider__ = 'invalid_boxes'
 
     def apply_filter(self, entry, invalid_boxes):
-        infinite_mask_x = np.logical_or(~np.isfinite(entry.x_mins), ~np.isfinite(entry.x_maxs))
-        infinite_mask_y = np.logical_or(~np.isfinite(entry.y_mins), ~np.isfinite(entry.y_maxs))
+        infinite_mask_x = np.logical_or(~np.isfinite(entry.x_mins), ~np.isfinite(entry.x_maxs)) # pylint: disable=E1130
+        infinite_mask_y = np.logical_or(~np.isfinite(entry.y_mins), ~np.isfinite(entry.y_maxs)) # pylint: disable=E1130
         infinite_mask = np.logical_or(infinite_mask_x, infinite_mask_y)
 
         return np.argwhere(infinite_mask).reshape(-1).tolist()
